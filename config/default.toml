@@ -1,0 +1,13 @@
+app_env = "development"
+log_level = "INFO"
+base_currency = "USD"
+benchmark_symbol = "SPY"
+database_url = "sqlite:///data/portfolio.db"
+portfolio_source = "demo"
+portfolio_csv_path = "data/portfolio.example.csv"
+market_data_provider = "demo"
+confidence_level = 0.95
+position_concentration_threshold = 0.25
+sector_concentration_threshold = 0.50
+enable_ai = false
+

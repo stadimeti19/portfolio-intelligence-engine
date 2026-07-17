@@ -1,0 +1,26 @@
+scenarios:
+  tech-selloff:
+    description: Technology assets decline while bonds rise modestly.
+    sector_shocks:
+      Technology: -0.15
+    asset_type_shocks:
+      Bond: 0.02
+      Cash: 0.00
+
+  market-correction:
+    description: Broad equity-market decline.
+    asset_type_shocks:
+      Equity: -0.10
+      ETF: -0.08
+      Bond: 0.02
+      Cash: 0.00
+
+  nvda-gap-down:
+    description: Symbol-specific semiconductor selloff layered onto a technology decline.
+    symbol_shocks:
+      NVDA: -0.12
+    sector_shocks:
+      Technology: -0.08
+    asset_type_shocks:
+      Bond: 0.01
+

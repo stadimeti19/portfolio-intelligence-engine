@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: python -m ruff check src tests
+      - name: Type check
+        run: python -m mypy src/portfolio_intelligence
+      - name: Python tests
+        run: python -m pytest tests
+      - name: C++ tests
+        run: |
+          cmake -S . -B build/cmake
+          cmake --build build/cmake
+          ctest --test-dir build/cmake --output-on-failure
+      - name: Package build
+        run: python -m pip wheel . -w dist
+

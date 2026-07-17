@@ -1,0 +1,60 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "portfolio-intelligence"
+version = "0.1.0"
+description = "Open-source C++/Python portfolio analytics SDK and CLI for deterministic portfolio accounting and risk analytics."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Sashank Tadimeti" }]
+dependencies = [
+  "pandas>=2.0",
+  "platformdirs>=4.0",
+  "pydantic>=2.6",
+  "python-dotenv>=1.0",
+  "PyYAML>=6.0",
+  "rich>=13.7",
+  "SQLAlchemy>=2.0",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.10",
+  "pytest>=8.0",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+portfolio = "portfolio_intelligence.cli.main:app"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["src/portfolio_intelligence"]
+cmake.version = ">=3.20"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008", "UP042"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["portfolio_intelligence"]
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true
