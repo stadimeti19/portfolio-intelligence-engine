@@ -75,6 +75,15 @@ int main() {
     component_sum += value;
   }
   assert(close(component_sum, rc.portfolio_volatility));
+  expect_throw([] {
+    risk_contributions(std::vector<double>{0.5, 0.5},
+                       std::vector<std::vector<double>>{{0.01, -1.0}, {-1.0, 0.01}});
+  });
+  expect_throw([] {
+    risk_contributions(std::vector<double>{0.5, 0.5},
+                       std::vector<std::vector<double>>{{0.01, std::numeric_limits<double>::quiet_NaN()},
+                                                        {0.0, 0.01}});
+  });
 
   const auto scenario = apply_scenario(
       std::vector<std::string>{"NVDA", "BND"},
@@ -94,4 +103,3 @@ int main() {
   std::cout << "portfolio_engine_tests passed\n";
   return 0;
 }
-

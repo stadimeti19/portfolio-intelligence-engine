@@ -12,6 +12,7 @@ add_library(portfolio_engine_core
 )
 target_include_directories(portfolio_engine_core PUBLIC cpp/include)
 
+set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 CONFIG REQUIRED)
 pybind11_add_module(portfolio_engine cpp/bindings/python_bindings.cpp)
 target_link_libraries(portfolio_engine PRIVATE portfolio_engine_core)

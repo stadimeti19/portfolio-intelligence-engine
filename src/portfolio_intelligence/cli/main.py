@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import typer
@@ -9,8 +10,19 @@ from portfolio_intelligence.cli.doctor import run_doctor
 from portfolio_intelligence.cli.formatting import money, pct, print_json, table
 from portfolio_intelligence.cli.setup import run_setup
 from portfolio_intelligence.config.paths import AppPaths
+from portfolio_intelligence.config.settings import Settings, load_settings
 from portfolio_intelligence.config.user_config import write_default_config
+from portfolio_intelligence.providers.market_data.cache import MarketDataCache
+from portfolio_intelligence.providers.market_data.errors import MarketDataError
+from portfolio_intelligence.providers.market_data.factory import (
+    build_market_data_provider,
+)
+from portfolio_intelligence.providers.market_data.factory import (
+    provider_status as load_provider_status,
+)
+from portfolio_intelligence.providers.portfolio.base import PortfolioSource
 from portfolio_intelligence.providers.portfolio.csv_source import CsvPortfolioSource
+from portfolio_intelligence.providers.portfolio.demo import DemoPortfolioSource
 from portfolio_intelligence.sdk import PortfolioAnalyzer
 from portfolio_intelligence.services.report_service import ReportService
 from portfolio_intelligence.storage.database import engine_from_url
@@ -18,12 +30,37 @@ from portfolio_intelligence.storage.schema import initialize_database
 
 app = typer.Typer(help="Portfolio Intelligence & Risk Engine")
 scenario_app = typer.Typer(help="Scenario analysis commands")
+sync_app = typer.Typer(help="Synchronize market data")
 app.add_typer(scenario_app, name="scenario")
+app.add_typer(sync_app, name="sync")
 console = Console()
+_UTC = timezone.utc  # noqa: UP017 - keep local test environments on Python 3.10 working.
 
 
-def _analyzer(path: str = "data/portfolio.example.csv") -> PortfolioAnalyzer:
-    return PortfolioAnalyzer.from_csv(path)
+def _settings() -> Settings:
+    return load_settings()
+
+
+def _portfolio_source(settings: Settings) -> PortfolioSource:
+    if settings.portfolio_source.lower() == "demo":
+        return DemoPortfolioSource()
+    return CsvPortfolioSource(settings.portfolio_csv_path)
+
+
+def _analyzer() -> PortfolioAnalyzer:
+    settings = _settings()
+    market_data = build_market_data_provider(settings)
+    return PortfolioAnalyzer(_portfolio_source(settings), market_data)
+
+
+def _portfolio_symbols(settings: Settings) -> tuple[list[str], date]:
+    transactions = _portfolio_source(settings).load_transactions()
+    symbols = sorted({tx.symbol for tx in transactions if tx.symbol})
+    start = min(
+        (tx.effective_date for tx in transactions),
+        default=date.today() - timedelta(days=365),
+    )
+    return symbols, start
 
 
 @app.callback(invoke_without_command=True)
@@ -62,6 +99,192 @@ def doctor(format: str = typer.Option("table", "--format")) -> None:
     if any(status == "FAIL" for status, _, _ in checks):
         raise typer.Exit(1)
     console.print("System is ready in offline mode.")
+
+
+@sync_app.callback(invoke_without_command=True)
+def sync_root(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        _sync_prices(symbol=None)
+        _sync_corporate_actions(symbol=None)
+
+
+@sync_app.command("prices")
+def sync_prices(symbol: str | None = typer.Option(None, "--symbol")) -> None:
+    _sync_prices(symbol=symbol)
+
+
+@sync_app.command("corporate-actions")
+def sync_corporate_actions(symbol: str | None = typer.Option(None, "--symbol")) -> None:
+    _sync_corporate_actions(symbol=symbol)
+
+
+def _sync_prices(symbol: str | None) -> None:
+    settings = _settings()
+    symbols, start = _portfolio_symbols(settings)
+    if symbol:
+        symbols = [symbol.upper()]
+        if start > date.today() - timedelta(days=365):
+            start = date.today() - timedelta(days=365)
+    provider = build_market_data_provider(settings)
+    rows: list[list[str]] = []
+    for item in symbols:
+        try:
+            bars = provider.get_daily_prices(item, start, date.today())
+        except MarketDataError as exc:
+            rows.append([item, "FAIL", str(exc)])
+        else:
+            latest = bars[-1].trading_date.isoformat() if bars else "n/a"
+            rows.append([item, "OK", f"{len(bars)} bars through {latest}"])
+    table("Price sync", ["Symbol", "Status", "Detail"], rows)
+    if any(row[1] == "FAIL" for row in rows):
+        raise typer.Exit(1)
+
+
+def _sync_corporate_actions(symbol: str | None) -> None:
+    settings = _settings()
+    symbols, start = _portfolio_symbols(settings)
+    if symbol:
+        symbols = [symbol.upper()]
+        if start > date.today() - timedelta(days=365):
+            start = date.today() - timedelta(days=365)
+    provider = build_market_data_provider(settings)
+    rows: list[list[str]] = []
+    for item in symbols:
+        try:
+            dividends = provider.get_dividends(item, start, date.today())
+            splits = provider.get_splits(item, start, date.today())
+        except MarketDataError as exc:
+            rows.append([item, "FAIL", str(exc)])
+        else:
+            rows.append([item, "OK", f"{len(dividends)} dividends, {len(splits)} splits"])
+    table("Corporate-action sync", ["Symbol", "Status", "Detail"], rows)
+    if any(row[1] == "FAIL" for row in rows):
+        raise typer.Exit(1)
+
+
+@app.command("data-status")
+def data_status(format: str = typer.Option("table", "--format")) -> None:
+    paths = AppPaths()
+    cache = MarketDataCache(paths.cache_dir / "market-data")
+    statuses = cache.statuses()
+    settings = _settings()
+    if not statuses and settings.market_data_provider.lower() in {"demo", "csv"}:
+        payload = _uncached_data_status(settings)
+    else:
+        payload = [
+            {
+                "symbol": status.symbol,
+                "provider": status.provider,
+                "endpoint": status.endpoint,
+                "first_date": status.first_date,
+                "latest_date": status.latest_date,
+                "retrieval_time": status.retrieval_timestamp,
+                "age": _age(status.retrieval_timestamp),
+                "cache_status": status.cache_status,
+                "fallback": status.fallback,
+                "stale_warning": "stale cache entry" if status.stale else "",
+            }
+            for status in statuses
+        ]
+    if format == "json":
+        print_json(payload)
+        return
+    table(
+        "Market data status",
+        [
+            "Symbol",
+            "Provider",
+            "Endpoint",
+            "First date",
+            "Latest date",
+            "Retrieved",
+            "Age",
+            "Cache",
+            "Fallback",
+            "Stale warning",
+        ],
+        [
+            [
+                str(row["symbol"]),
+                str(row["provider"]),
+                str(row["endpoint"]),
+                str(row["first_date"] or "n/a"),
+                str(row["latest_date"] or "n/a"),
+                str(row["retrieval_time"] or "n/a"),
+                str(row["age"]),
+                str(row["cache_status"]),
+                "yes" if row["fallback"] else "no",
+                str(row["stale_warning"]),
+            ]
+            for row in payload
+        ],
+    )
+
+
+@app.command("provider-status")
+def provider_status(format: str = typer.Option("table", "--format")) -> None:
+    statuses = load_provider_status(_settings())
+    if format == "json":
+        print_json(statuses)
+        return
+    table(
+        "Provider status",
+        ["Role", "Provider", "Status", "Detail"],
+        [[item["role"], item["provider"], item["status"], item["detail"]] for item in statuses],
+    )
+
+
+def _uncached_data_status(settings: Settings) -> list[dict[str, object]]:
+    symbols, start = _portfolio_symbols(settings)
+    provider = build_market_data_provider(settings)
+    rows: list[dict[str, object]] = []
+    for symbol in symbols:
+        try:
+            bars = provider.get_daily_prices(symbol, start, date.today())
+        except MarketDataError as exc:
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "provider": provider.name,
+                    "endpoint": "prices",
+                    "first_date": None,
+                    "latest_date": None,
+                    "retrieval_time": None,
+                    "age": "n/a",
+                    "cache_status": f"unavailable: {exc}",
+                    "fallback": False,
+                    "stale_warning": "",
+                }
+            )
+            continue
+        rows.append(
+            {
+                "symbol": symbol,
+                "provider": provider.name,
+                "endpoint": "prices",
+                "first_date": bars[0].trading_date if bars else None,
+                "latest_date": bars[-1].trading_date if bars else None,
+                "retrieval_time": None,
+                "age": "n/a",
+                "cache_status": "uncached",
+                "fallback": any(bar.fallback for bar in bars),
+                "stale_warning": "",
+            }
+        )
+    return rows
+
+
+def _age(value: datetime | None) -> str:
+    if value is None:
+        return "n/a"
+    current = value if value.tzinfo else value.replace(tzinfo=_UTC)
+    delta = datetime.now(_UTC) - current
+    hours = delta.total_seconds() / 3600
+    if hours < 1:
+        return f"{int(delta.total_seconds() // 60)}m"
+    if hours < 48:
+        return f"{hours:.1f}h"
+    return f"{hours / 24:.1f}d"
 
 
 @app.command("import-transactions")

@@ -16,6 +16,8 @@ This is not a stock chatbot. Authoritative accounting and risk numbers are compu
 
 - Transaction-driven accounting with deposits, withdrawals, buys, sells, dividends, fees, cash, average cost, realized P&L, and unrealized P&L.
 - Offline synthetic demo data for equities, ETFs, bond-like exposure, SPY benchmark, drawdown, volatility spike, and recovery periods.
+- Live daily prices, quotes, dividends, and splits through Twelve Data, with optional Finnhub, Alpha Vantage, or CSV fallback.
+- Local market-data cache with freshness metadata, incremental price synchronization, retries, timeout handling, and provider diagnostics.
 - C++ analytics for returns, annualization, volatility, Sharpe, Sortino, maximum drawdown, beta, historical VaR, Expected Shortfall, covariance, correlation, risk contribution, and scenario shock arithmetic.
 - Python SDK centered on `PortfolioAnalyzer`.
 - Typer/Rich CLI with table and JSON output.
@@ -56,6 +58,9 @@ The package targets Python 3.11+ and builds the `portfolio_engine` pybind11 exte
 ```bash
 portfolio init
 portfolio doctor
+portfolio provider-status
+portfolio sync
+portfolio data-status
 portfolio import-transactions data/portfolio.example.csv --dry-run
 portfolio holdings
 portfolio summary
@@ -114,6 +119,23 @@ For dividends, deposits, and withdrawals, `price` stores the cash amount. The MV
 
 Secrets should live outside normal config and are ignored by git.
 
+Market-data defaults remain offline-safe. To use live data:
+
+```dotenv
+MARKET_DATA_PROVIDER=twelvedata
+MARKET_DATA_FALLBACK_PROVIDER=finnhub
+TWELVE_DATA_API_KEY=...
+ALPHA_VANTAGE_API_KEY=
+FINNHUB_API_KEY=
+MARKET_DATA_TIMEOUT_SECONDS=15
+MARKET_DATA_MAX_RETRIES=3
+PRICE_CACHE_TTL_HOURS=12
+CORPORATE_ACTION_CACHE_TTL_HOURS=24
+ALLOW_STALE_CACHE=true
+```
+
+Use `MARKET_DATA_PROVIDER=demo` for the deterministic no-key demo. See `docs/market_data.md` for provider configuration, freshness policy, cache behavior, rate-limit behavior, limitations, and troubleshooting.
+
 ## Testing
 
 ```bash
@@ -123,6 +145,7 @@ make test
 ```
 
 Python tests cover CSV parsing, validation, average-cost accounting, cash flows, demo providers, scenarios, C++ reference wrapper behavior, and the demo report integration path.
+Live provider tests use mocked HTTP responses only; normal unit tests and CI do not make real API requests.
 
 C++ tests are available through CTest. The repository includes deterministic C++ assertions rather than a vendored GoogleTest copy so the offline MVP does not fetch dependencies during test configuration.
 
@@ -142,26 +165,29 @@ The MVP includes:
 - `CsvPortfolioSource`
 - `DemoMarketDataProvider`
 - `CsvMarketDataProvider`
+- `TwelveDataProvider`
+- `FinnhubProvider`
+- `AlphaVantageProvider`
+- Local cached provider wrapper
+- Fallback market-data coordinator
 
-Future providers should normalize external formats into domain models before application services see them. Planned adapters include Twelve Data, Alpha Vantage, SEC EDGAR, FRED, and optional Plaid.
+Provider-specific response objects stay inside provider modules. External formats are normalized into domain models before application services see them.
 
 ## Roadmap
 
-1. Twelve Data market-data adapter with caching and rate limits.
-2. Alpha Vantage ETF composition adapter.
-3. ETF look-through exposure and overlap.
-4. Historical stress-period library.
-5. Cost-aware constrained rebalancing.
-6. Transaction-cost and turnover reporting.
-7. Standalone HTML reports.
-8. FRED macro-data adapter.
-9. SEC EDGAR fundamentals adapter.
-10. Probabilistic and Deflated Sharpe Ratio.
-11. Optional grounded OpenAI explanations.
+1. ETF look-through exposure and overlap.
+2. Historical stress-period library.
+3. Cost-aware constrained rebalancing.
+4. Transaction-cost and turnover reporting.
+5. Standalone HTML reports.
+6. FRED macro-data adapter.
+7. SEC EDGAR fundamentals adapter.
+8. Probabilistic and Deflated Sharpe Ratio.
+9. Optional grounded OpenAI explanations.
 
 ## Limitations
 
-This is not financial advice. Demo data is synthetic. VaR is not a maximum-loss estimate. Correlations, betas, and Sharpe ratios are uncertain estimates. Taxes, corporate actions, tax-lot elections, live provider delays, and transaction-cost optimization are future work.
+This is not financial advice. Demo data is synthetic. VaR is not a maximum-loss estimate. Correlations, betas, and Sharpe ratios are uncertain estimates. Taxes, tax-lot elections, live provider delays, vendor data corrections, and transaction-cost optimization remain important limitations.
 
 ## Contributing
 

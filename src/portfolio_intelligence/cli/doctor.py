@@ -4,6 +4,8 @@ import importlib
 import sys
 
 from portfolio_intelligence.config.paths import AppPaths
+from portfolio_intelligence.config.settings import load_settings
+from portfolio_intelligence.providers.market_data.factory import provider_status
 from portfolio_intelligence.providers.portfolio.demo import DemoPortfolioSource
 
 
@@ -34,6 +36,14 @@ def run_doctor() -> list[tuple[str, str, str]]:
     except Exception as exc:
         checks.append(("FAIL", "Demo portfolio", str(exc)))
     checks.append(("PASS", "Demo market data", "synthetic offline provider available"))
-    checks.append(("WARN", "Live market-data provider", "not configured"))
+    for status in provider_status(load_settings(), paths=paths):
+        level = "PASS" if status["status"] == "ok" else "WARN"
+        checks.append(
+            (
+                level,
+                f"Market data {status['role']}: {status['provider']}",
+                status["detail"],
+            )
+        )
     checks.append(("WARN", "OpenAI", "disabled"))
     return checks

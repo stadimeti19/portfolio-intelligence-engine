@@ -6,8 +6,14 @@ database_url = "sqlite:///data/portfolio.db"
 portfolio_source = "demo"
 portfolio_csv_path = "data/portfolio.example.csv"
 market_data_provider = "demo"
+market_data_fallback_provider = ""
+market_data_csv_directory = "data/prices"
+market_data_timeout_seconds = 15
+market_data_max_retries = 3
+price_cache_ttl_hours = 12
+corporate_action_cache_ttl_hours = 24
+allow_stale_cache = true
 confidence_level = 0.95
 position_concentration_threshold = 0.25
 sector_concentration_threshold = 0.50
 enable_ai = false
-

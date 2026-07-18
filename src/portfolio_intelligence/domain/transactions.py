@@ -29,6 +29,13 @@ class Transaction(BaseModel):
     source: str = "csv"
     import_order: int = 0
 
+    @field_validator("transaction_id")
+    @classmethod
+    def transaction_id_not_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("transaction_id is required")
+        return value
+
     @field_validator("quantity", "price", "fee")
     @classmethod
     def nonnegative(cls, value: float) -> float:

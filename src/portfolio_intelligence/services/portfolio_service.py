@@ -53,6 +53,32 @@ class PortfolioService:
             return []
         start = min(tx.effective_date for tx in transactions)
         symbols = sorted({tx.symbol for tx in transactions if tx.symbol})
+        if not symbols:
+            end_date = end or max(tx.effective_date for tx in transactions)
+            valuation_dates = sorted(
+                {tx.effective_date for tx in transactions if start <= tx.effective_date <= end_date}
+                | {end_date}
+            )
+            cash_snapshots: list[PortfolioSnapshot] = []
+            for current_date in valuation_dates:
+                state = self.ledger.build_through(transactions, current_date)
+                cash_snapshots.append(
+                    PortfolioSnapshot(
+                        date=current_date,
+                        cash_balance=state.cash,
+                        position_values={},
+                        total_portfolio_value=state.cash,
+                        total_cost_basis=0.0,
+                        realized_pnl=state.realized_pnl,
+                        unrealized_pnl=0.0,
+                        external_cash_flow=state.external_cash_flows.get(current_date, 0.0),
+                        data_provenance={
+                            "synthetic": False,
+                            "method": "cash_transaction_dates",
+                        },
+                    )
+                )
+            return cash_snapshots
         end_date = end or min(self.market_data.get_latest_quote(symbol).as_of for symbol in symbols)
         calendars: dict[str, dict[date, float]] = {}
         all_dates: set[date] = set()

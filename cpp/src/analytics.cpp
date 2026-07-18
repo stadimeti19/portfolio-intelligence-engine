@@ -284,6 +284,7 @@ RiskContributionResult risk_contributions(std::span<const double> weights,
     if (row.size() != weights.size()) {
       throw std::invalid_argument("covariance matrix must be square");
     }
+    validate_finite(row, "covariance");
   }
   std::vector<double> sigma_w(weights.size(), 0.0);
   for (std::size_t i = 0; i < weights.size(); ++i) {
@@ -350,4 +351,3 @@ ScenarioResult apply_scenario(
 }
 
 }  // namespace portfolio_engine
-

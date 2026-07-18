@@ -63,15 +63,23 @@ def cumulative_return(returns: Sequence[float]) -> float:
 def annualized_return(returns: Sequence[float], periods_per_year: float = 252.0) -> float:
     if _cpp is not None:
         return float(_cpp.annualized_return(list(returns), periods_per_year))
+    _finite(returns, "returns")
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive")
     if len(returns) < 2:
         raise ValueError("annualized_return requires at least two return observations")
     cumulative = cumulative_return(returns)
+    if cumulative <= -1.0:
+        return -1.0
     return float((1.0 + cumulative) ** (periods_per_year / len(returns)) - 1.0)
 
 
 def annualized_volatility(returns: Sequence[float], periods_per_year: float = 252.0) -> float:
     if _cpp is not None:
         return float(_cpp.annualized_volatility(list(returns), periods_per_year))
+    _finite(returns, "returns")
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive")
     if len(returns) < 2:
         raise ValueError("annualized_volatility requires at least two return observations")
     avg = sum(returns) / len(returns)
@@ -84,6 +92,11 @@ def sharpe_ratio(
 ) -> float:
     if _cpp is not None:
         return float(_cpp.sharpe_ratio(list(returns), risk_free_rate, periods_per_year))
+    _finite(returns, "returns")
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive")
+    if len(returns) < 2:
+        raise ValueError("sharpe_ratio requires at least two observations")
     excess = [value - (risk_free_rate / periods_per_year) for value in returns]
     vol = annualized_volatility(excess, periods_per_year)
     if vol == 0:
@@ -96,6 +109,11 @@ def sortino_ratio(
 ) -> float:
     if _cpp is not None:
         return float(_cpp.sortino_ratio(list(returns), risk_free_rate, periods_per_year))
+    _finite(returns, "returns")
+    if periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive")
+    if len(returns) < 2:
+        raise ValueError("sortino_ratio requires at least two observations")
     target = risk_free_rate / periods_per_year
     downside = [min(0.0, value - target) for value in returns]
     downside_dev = math.sqrt(sum(value * value for value in downside) / len(returns))
@@ -151,6 +169,8 @@ def beta(asset_returns: Sequence[float], benchmark_returns: Sequence[float]) -> 
         return float(_cpp.beta(list(asset_returns), list(benchmark_returns)))
     if len(asset_returns) != len(benchmark_returns) or len(asset_returns) < 2:
         raise ValueError("beta inputs must have the same length and at least two observations")
+    _finite(asset_returns, "asset_returns")
+    _finite(benchmark_returns, "benchmark_returns")
     asset_avg = sum(asset_returns) / len(asset_returns)
     bench_avg = sum(benchmark_returns) / len(benchmark_returns)
     cov = sum(
@@ -166,8 +186,11 @@ def beta(asset_returns: Sequence[float], benchmark_returns: Sequence[float]) -> 
 def historical_var(returns: Sequence[float], confidence_level: float) -> float:
     if _cpp is not None:
         return float(_cpp.historical_var(list(returns), confidence_level))
+    _finite(returns, "returns")
     if not 0 < confidence_level < 1:
         raise ValueError("confidence_level must be between 0 and 1")
+    if not returns:
+        raise ValueError("historical_var requires at least one return observation")
     losses = sorted(-value for value in returns)
     index = max(0, min(len(losses) - 1, math.ceil(confidence_level * len(losses)) - 1))
     return losses[index]
@@ -185,8 +208,15 @@ def covariance_matrix(returns: Sequence[Sequence[float]]) -> list[list[float]]:
     if _cpp is not None:
         return [list(row) for row in _cpp.covariance_matrix([list(row) for row in returns])]
     rows = [list(row) for row in returns]
-    if not rows or len(rows[0]) < 2:
+    if not rows:
         raise ValueError("covariance_matrix requires observations")
+    observations = len(rows[0])
+    if observations < 2:
+        raise ValueError("covariance_matrix requires at least two observations")
+    for index, row in enumerate(rows):
+        if len(row) != observations:
+            raise ValueError("all return series must have the same length")
+        _finite(row, f"returns[{index}]")
     out = [[0.0 for _ in rows] for _ in rows]
     for i, left in enumerate(rows):
         for j, right in enumerate(rows):
@@ -224,8 +254,18 @@ def risk_contributions(
             list(result.component_contribution),
             list(result.percent_contribution),
         )
+    _finite(weights, "weights")
+    if not weights or len(covariance) != len(weights):
+        raise ValueError("weights and covariance dimensions must match")
+    for row in covariance:
+        if len(row) != len(weights):
+            raise ValueError("covariance matrix must be square")
+        _finite(row, "covariance")
     sigma_w = [sum(row[j] * weights[j] for j in range(len(weights))) for row in covariance]
     variance = sum(weights[i] * sigma_w[i] for i in range(len(weights)))
+    if variance < -1e-12:
+        raise ValueError("portfolio variance cannot be negative")
+    variance = max(0.0, variance)
     volatility = math.sqrt(max(0.0, variance))
     marginal = [value / volatility if volatility else 0.0 for value in sigma_w]
     component = [weights[i] * marginal[i] for i in range(len(weights))]

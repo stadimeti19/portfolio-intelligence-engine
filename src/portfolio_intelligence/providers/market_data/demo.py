@@ -4,7 +4,7 @@ import math
 from datetime import date, timedelta
 
 from portfolio_intelligence.domain.assets import Asset, AssetType
-from portfolio_intelligence.domain.prices import PriceBar, Quote
+from portfolio_intelligence.domain.prices import Dividend, PriceBar, Quote, StockSplit
 
 DEMO_ASSETS: dict[str, Asset] = {
     "NVDA": Asset(
@@ -68,6 +68,7 @@ def business_days(start: date, end: date) -> list[date]:
 
 
 class DemoMarketDataProvider:
+    name = "demo"
     synthetic = True
 
     def __init__(self, start: date = date(2024, 1, 2), end: date = date(2026, 1, 2)) -> None:
@@ -93,6 +94,18 @@ class DemoMarketDataProvider:
             source="demo",
             synthetic=True,
         )
+
+    def get_dividends(self, symbol: str, start: date, end: date) -> list[Dividend]:
+        symbol = symbol.upper()
+        if symbol not in DEMO_ASSETS:
+            raise ValueError(f"unknown demo symbol: {symbol}")
+        return []
+
+    def get_splits(self, symbol: str, start: date, end: date) -> list[StockSplit]:
+        symbol = symbol.upper()
+        if symbol not in DEMO_ASSETS:
+            raise ValueError(f"unknown demo symbol: {symbol}")
+        return []
 
     def _generate(self, symbol: str) -> list[PriceBar]:
         price = BASE_PRICES[symbol]

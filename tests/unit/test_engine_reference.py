@@ -31,3 +31,27 @@ def test_drawdown_beta_covariance_correlation_and_risk_contribution() -> None:
     result = _engine.risk_contributions([0.6, 0.4], [[0.04, 0.01], [0.01, 0.09]])
     assert sum(result.component_contribution) == pytest.approx(result.portfolio_volatility)
     assert math.isfinite(result.portfolio_variance)
+
+
+def test_python_covariance_matrix_rejects_ragged_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_engine, "_cpp", None)
+    with pytest.raises(ValueError, match="same length"):
+        _engine.covariance_matrix([[0.1, 0.2], []])
+    with pytest.raises(ValueError, match="same length"):
+        _engine.covariance_matrix([[0.1, 0.2], [0.3]])
+    with pytest.raises(ValueError, match="same length"):
+        _engine.covariance_matrix([[0.1, 0.2], [0.3, 0.4, 0.5]])
+
+
+def test_python_tail_risk_and_risk_contribution_validate_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_engine, "_cpp", None)
+    with pytest.raises(ValueError, match="at least one return"):
+        _engine.historical_var([], 0.95)
+    with pytest.raises(ValueError, match="periods_per_year"):
+        _engine.annualized_volatility([0.01, 0.02], 0.0)
+    with pytest.raises(ValueError, match="dimensions"):
+        _engine.risk_contributions([0.5, 0.5], [[0.1]])
+    with pytest.raises(ValueError, match="cannot be negative"):
+        _engine.risk_contributions([0.5, 0.5], [[0.01, -1.0], [-1.0, 0.01]])

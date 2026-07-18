@@ -16,6 +16,16 @@ class Settings(BaseModel):
     portfolio_source: str = "demo"
     portfolio_csv_path: str = "data/portfolio.example.csv"
     market_data_provider: str = "demo"
+    market_data_fallback_provider: str | None = None
+    market_data_csv_directory: str = "data/prices"
+    twelve_data_api_key: str | None = None
+    alpha_vantage_api_key: str | None = None
+    finnhub_api_key: str | None = None
+    market_data_timeout_seconds: int = 15
+    market_data_max_retries: int = 3
+    price_cache_ttl_hours: int = 12
+    corporate_action_cache_ttl_hours: int = 24
+    allow_stale_cache: bool = True
     confidence_level: float = 0.95
     position_concentration_threshold: float = 0.25
     sector_concentration_threshold: float = 0.50
@@ -38,6 +48,20 @@ def load_settings(
         "portfolio_source": merged.get("PORTFOLIO_SOURCE", "demo"),
         "portfolio_csv_path": merged.get("PORTFOLIO_CSV_PATH", "data/portfolio.example.csv"),
         "market_data_provider": merged.get("MARKET_DATA_PROVIDER", "demo"),
+        "market_data_fallback_provider": merged.get("MARKET_DATA_FALLBACK_PROVIDER") or None,
+        "market_data_csv_directory": merged.get("MARKET_DATA_CSV_DIRECTORY", "data/prices"),
+        "twelve_data_api_key": merged.get("TWELVE_DATA_API_KEY") or None,
+        "alpha_vantage_api_key": merged.get("ALPHA_VANTAGE_API_KEY") or None,
+        "finnhub_api_key": merged.get("FINNHUB_API_KEY") or None,
+        "market_data_timeout_seconds": int(
+            str(merged.get("MARKET_DATA_TIMEOUT_SECONDS", "15"))
+        ),
+        "market_data_max_retries": int(str(merged.get("MARKET_DATA_MAX_RETRIES", "3"))),
+        "price_cache_ttl_hours": int(str(merged.get("PRICE_CACHE_TTL_HOURS", "12"))),
+        "corporate_action_cache_ttl_hours": int(
+            str(merged.get("CORPORATE_ACTION_CACHE_TTL_HOURS", "24"))
+        ),
+        "allow_stale_cache": str(merged.get("ALLOW_STALE_CACHE", "true")).lower() == "true",
         "confidence_level": float(str(merged.get("CONFIDENCE_LEVEL", "0.95"))),
         "position_concentration_threshold": float(
             str(merged.get("POSITION_CONCENTRATION_THRESHOLD", "0.25"))
