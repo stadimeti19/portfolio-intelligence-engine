@@ -23,6 +23,16 @@ from portfolio_intelligence.providers.market_data.factory import (
 from portfolio_intelligence.providers.portfolio.base import PortfolioSource
 from portfolio_intelligence.providers.portfolio.csv_source import CsvPortfolioSource
 from portfolio_intelligence.providers.portfolio.demo import DemoPortfolioSource
+from portfolio_intelligence.providers.portfolio.holdings_snapshot import (
+    HoldingsImportResult,
+    HoldingSnapshot,
+    HoldingsSnapshotSource,
+    load_holdings_snapshot,
+    parse_pasted_holdings,
+    upsert_clean_holding,
+    write_clean_holdings,
+    write_snapshot_transactions,
+)
 from portfolio_intelligence.sdk import PortfolioAnalyzer
 from portfolio_intelligence.services.report_service import ReportService
 from portfolio_intelligence.storage.database import engine_from_url
@@ -31,8 +41,10 @@ from portfolio_intelligence.storage.schema import initialize_database
 app = typer.Typer(help="Portfolio Intelligence & Risk Engine")
 scenario_app = typer.Typer(help="Scenario analysis commands")
 sync_app = typer.Typer(help="Synchronize market data")
+broker_app = typer.Typer(help="Import local brokerage exports")
 app.add_typer(scenario_app, name="scenario")
 app.add_typer(sync_app, name="sync")
+app.add_typer(broker_app, name="import-broker")
 console = Console()
 _UTC = timezone.utc  # noqa: UP017 - keep local test environments on Python 3.10 working.
 
@@ -42,8 +54,14 @@ def _settings() -> Settings:
 
 
 def _portfolio_source(settings: Settings) -> PortfolioSource:
-    if settings.portfolio_source.lower() == "demo":
+    source = settings.portfolio_source.lower()
+    if source == "demo":
         return DemoPortfolioSource()
+    if source == "holdings":
+        return HoldingsSnapshotSource(
+            settings.portfolio_holdings_path,
+            source_format=settings.portfolio_holdings_format,
+        )
     return CsvPortfolioSource(settings.portfolio_csv_path)
 
 
@@ -312,6 +330,192 @@ def import_transactions(
     console.print(f"Validated {len(transactions)} transactions from {path}")
     if dry_run:
         console.print("Dry run only. No data was written.")
+
+
+@app.command("import-holdings")
+def import_holdings(
+    path: Path | None = typer.Argument(None),
+    source_format: str = typer.Option("auto", "--source-format", help="auto, generic, fidelity"),
+    paste: bool = typer.Option(False, "--paste", help="Read a pasted holdings table from stdin."),
+    export_clean: Path | None = typer.Option(None, "--export-clean"),
+    export_transactions: Path | None = typer.Option(None, "--export-transactions"),
+    as_of: str | None = typer.Option(None, "--as-of", help="Snapshot simulation start date."),
+    format: str = typer.Option("table", "--format"),
+) -> None:
+    if paste:
+        console.print("Paste holdings table, then press Ctrl-D:")
+        result = parse_pasted_holdings(_read_stdin())
+    elif path is not None:
+        result = load_holdings_snapshot(path, source_format=source_format)
+    else:
+        raise typer.BadParameter("provide a holdings file path or use --paste")
+    _handle_holdings_import(
+        result,
+        export_clean=export_clean,
+        export_transactions=export_transactions,
+        as_of=_parse_optional_date(as_of),
+        output_format=format,
+    )
+
+
+@app.command("add")
+def add_holding(
+    symbol: str,
+    shares: float = typer.Option(..., "--shares", "--quantity"),
+    average_cost: float | None = typer.Option(None, "--average-cost"),
+    cost_basis: float | None = typer.Option(None, "--cost-basis"),
+    current_price: float | None = typer.Option(None, "--current-price"),
+    asset_type: str | None = typer.Option(None, "--asset-type"),
+    description: str | None = typer.Option(None, "--description"),
+    output: Path = typer.Option(Path("data/holdings.csv"), "--output"),
+) -> None:
+    holding = HoldingSnapshot(
+        symbol=symbol,
+        quantity=shares,
+        average_cost_basis=average_cost,
+        cost_basis_total=cost_basis,
+        current_price=current_price,
+        asset_type=asset_type,
+        description=description,
+    )
+    upsert_clean_holding(output, holding)
+    console.print(f"Saved {holding.symbol} to {output}")
+
+
+@app.command("holdings-wizard")
+def holdings_wizard(
+    output: Path = typer.Option(Path("data/holdings.csv"), "--output"),
+) -> None:
+    holdings: list[HoldingSnapshot] = []
+    if output.exists():
+        existing = load_holdings_snapshot(output, source_format="generic")
+        if existing.errors:
+            _handle_holdings_import(
+                existing,
+                export_clean=None,
+                export_transactions=None,
+                as_of=None,
+                output_format="table",
+            )
+        holdings.extend(existing.holdings)
+    console.print("Enter holdings. Average cost is optional if you provide current price.")
+    while True:
+        symbol = typer.prompt("Symbol").strip()
+        shares = float(typer.prompt("Shares"))
+        average_cost_text = typer.prompt("Average cost", default="", show_default=False)
+        current_price_text = typer.prompt("Current price", default="", show_default=False)
+        asset_type = typer.prompt("Type", default="", show_default=False).strip() or None
+        holding = HoldingSnapshot(
+            symbol=symbol,
+            quantity=shares,
+            average_cost_basis=_optional_float(average_cost_text),
+            current_price=_optional_float(current_price_text),
+            asset_type=asset_type,
+        )
+        holdings.append(holding)
+        if not typer.confirm("Add another holding?", default=True):
+            break
+    write_clean_holdings(output, holdings)
+    console.print(f"Wrote {len(holdings)} holdings to {output}")
+
+
+@broker_app.command("fidelity")
+def import_fidelity(
+    path: Path,
+    export_clean: Path | None = typer.Option(None, "--export-clean"),
+    export_transactions: Path | None = typer.Option(None, "--export-transactions"),
+    as_of: str | None = typer.Option(None, "--as-of", help="Snapshot simulation start date."),
+    format: str = typer.Option("table", "--format"),
+) -> None:
+    result = load_holdings_snapshot(path, source_format="fidelity")
+    _handle_holdings_import(
+        result,
+        export_clean=export_clean,
+        export_transactions=export_transactions,
+        as_of=_parse_optional_date(as_of),
+        output_format=format,
+    )
+
+
+def _handle_holdings_import(
+    result: HoldingsImportResult,
+    *,
+    export_clean: Path | None,
+    export_transactions: Path | None,
+    as_of: date | None,
+    output_format: str,
+) -> None:
+    payload = {
+        "source_format": result.source_format,
+        "valid_holdings": len(result.holdings),
+        "errors": [error.__dict__ for error in result.errors],
+        "retained_columns": result.retained_columns,
+        "ignored_columns": result.ignored_columns,
+        "symbols": [holding.symbol for holding in result.holdings],
+        "total_cost_basis": result.total_cost_basis if not result.errors else None,
+        "export_clean": str(export_clean) if export_clean else None,
+        "export_transactions": str(export_transactions) if export_transactions else None,
+    }
+    if result.errors:
+        if output_format == "json":
+            print_json(payload)
+        else:
+            table(
+                "Holdings import errors",
+                ["Line", "Message"],
+                [[str(error.line_number), error.message] for error in result.errors],
+            )
+        raise typer.Exit(1)
+    if export_clean:
+        write_clean_holdings(export_clean, result.holdings)
+    if export_transactions:
+        write_snapshot_transactions(
+            export_transactions,
+            result.holdings,
+            as_of=as_of or date.today() - timedelta(days=365),
+        )
+    if output_format == "json":
+        print_json(payload)
+        return
+    console.print(f"Detected {result.source_format} holdings export")
+    table(
+        "Holdings preview",
+        ["Symbol", "Quantity", "Average Cost", "Cost Basis", "Type"],
+        [
+            [
+                holding.symbol,
+                f"{holding.quantity:.6g}",
+                money(holding.average_cost_basis or holding.synthetic_purchase_price),
+                money(
+                    holding.cost_basis_total
+                    or holding.synthetic_purchase_price * holding.quantity
+                ),
+                holding.asset_type or "n/a",
+            ]
+            for holding in result.holdings
+        ],
+    )
+    table("Fields retained", ["Column"], [[column] for column in result.retained_columns])
+    table("Fields ignored", ["Column"], [[column] for column in result.ignored_columns])
+    if export_clean:
+        console.print(f"Wrote clean holdings to {export_clean}")
+    if export_transactions:
+        console.print(f"Wrote snapshot transactions to {export_transactions}")
+
+
+def _parse_optional_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
+
+
+def _read_stdin() -> str:
+    import sys
+
+    return sys.stdin.read()
+
+
+def _optional_float(value: str) -> float | None:
+    text = value.strip()
+    return float(text) if text else None
 
 
 @app.command()

@@ -9,6 +9,8 @@ It is not a stock chatbot and it is not financial advice. Accounting and risk nu
 ## What It Does
 
 - Reconstructs a portfolio from transaction CSV files.
+- Imports current-holdings snapshots for easier first-time setup.
+- Reads Fidelity positions exports locally and keeps only safe whitelisted fields.
 - Supports deposits, withdrawals, buys, sells, dividends, fees, cash, average cost, realized P&L, and unrealized P&L.
 - Runs fully offline with synthetic demo portfolio and market data.
 - Supports live daily prices, quotes, dividends, and splits through:
@@ -71,6 +73,26 @@ Get API keys here:
 - Finnhub: [get a free API key](https://finnhub.io/register) and see the [Finnhub API docs](https://finnhub.io/docs/api).
 - Alpha Vantage: [claim a free API key](https://www.alphavantage.co/support/#api-key) and see the [Alpha Vantage docs](https://www.alphavantage.co/documentation/).
 
+Before verifying, make sure you have already installed the package and initialized the local workspace:
+
+```bash
+python -m pip install -e ".[dev]"
+portfolio setup
+```
+
+If you want to sync live data for your own portfolio instead of the bundled demo portfolio, also point the app at your transaction CSV:
+
+```dotenv
+PORTFOLIO_SOURCE=csv
+PORTFOLIO_CSV_PATH=path/to/your-transactions.csv
+```
+
+You can validate that CSV before syncing:
+
+```bash
+portfolio import-transactions path/to/your-transactions.csv --dry-run
+```
+
 Then verify and sync:
 
 ```bash
@@ -82,6 +104,75 @@ portfolio data-status
 portfolio summary
 portfolio risk
 ```
+
+## Easiest Portfolio Setup
+
+The easiest way to use your own portfolio is a current-holdings snapshot. This is less detailed than full transaction history, but it is much simpler and avoids storing broker account identifiers.
+
+For Fidelity positions exports, the app keeps only approved fields such as symbol, quantity, description, current price, current value, cost basis, average cost basis, type, and currency. Fields such as account name, account ID, gain/loss columns, percentages, and other broker metadata are ignored.
+
+Preview a Fidelity positions export locally:
+
+```bash
+portfolio import-broker fidelity ~/Downloads/Portfolio_Positions.csv
+```
+
+Write a clean holdings file with sensitive broker columns discarded:
+
+```bash
+portfolio import-broker fidelity ~/Downloads/Portfolio_Positions.csv \
+  --export-clean data/holdings.csv
+```
+
+Then use that clean holdings file:
+
+```dotenv
+PORTFOLIO_SOURCE=holdings
+PORTFOLIO_HOLDINGS_PATH=data/holdings.csv
+PORTFOLIO_HOLDINGS_FORMAT=generic
+```
+
+You can also import a simple holdings CSV directly:
+
+```csv
+symbol,quantity,average_cost,asset_type,currency
+AAPL,10,185.20,Stock,USD
+VOO,5,470.00,ETF,USD
+MSFT,3,410.00,Stock,USD
+```
+
+```bash
+portfolio import-holdings data/holdings.csv
+```
+
+For a small portfolio, add holdings one at a time:
+
+```bash
+portfolio add AAPL --shares 10 --average-cost 185.20 --asset-type Stock
+portfolio add VOO --shares 5 --average-cost 470.00 --asset-type ETF
+```
+
+Or use the interactive wizard:
+
+```bash
+portfolio holdings-wizard
+```
+
+You can also paste a table copied from a spreadsheet or broker page:
+
+```bash
+portfolio import-holdings --paste --export-clean data/holdings.csv
+```
+
+Paste something like this, then press Ctrl-D:
+
+```text
+Symbol    Quantity    Average Cost    Type
+AAPL      10          185.20          Stock
+VOO       5           470.00          ETF
+```
+
+Snapshot mode supports current value, allocation, unrealized P&L when cost basis exists, volatility estimates, correlations, beta, VaR, Expected Shortfall, concentration checks, and stress scenarios. It does not represent your actual historical deposits, withdrawals, realized P&L, or time-weighted performance.
 
 If you only have one live provider key, use it directly:
 
@@ -109,6 +200,11 @@ portfolio sync corporate-actions
 portfolio data-status
 portfolio data-status --format json
 
+portfolio import-broker fidelity ~/Downloads/Portfolio_Positions.csv
+portfolio import-holdings data/holdings.csv
+portfolio import-holdings --paste --export-clean data/holdings.csv
+portfolio add AAPL --shares 10 --average-cost 185.20
+portfolio holdings-wizard
 portfolio import-transactions data/portfolio.example.csv --dry-run
 portfolio holdings
 portfolio summary
@@ -158,6 +254,8 @@ Important settings:
 ```dotenv
 PORTFOLIO_SOURCE=demo
 PORTFOLIO_CSV_PATH=data/portfolio.example.csv
+PORTFOLIO_HOLDINGS_PATH=data/holdings.csv
+PORTFOLIO_HOLDINGS_FORMAT=auto
 
 MARKET_DATA_PROVIDER=demo
 MARKET_DATA_FALLBACK_PROVIDER=

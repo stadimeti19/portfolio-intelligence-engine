@@ -15,6 +15,8 @@ class Settings(BaseModel):
     database_url: str = "sqlite:///data/portfolio.db"
     portfolio_source: str = "demo"
     portfolio_csv_path: str = "data/portfolio.example.csv"
+    portfolio_holdings_path: str = "data/holdings.csv"
+    portfolio_holdings_format: str = "auto"
     market_data_provider: str = "demo"
     market_data_fallback_provider: str | None = None
     market_data_csv_directory: str = "data/prices"
@@ -47,6 +49,8 @@ def load_settings(
         "database_url": merged.get("DATABASE_URL", "sqlite:///data/portfolio.db"),
         "portfolio_source": merged.get("PORTFOLIO_SOURCE", "demo"),
         "portfolio_csv_path": merged.get("PORTFOLIO_CSV_PATH", "data/portfolio.example.csv"),
+        "portfolio_holdings_path": merged.get("PORTFOLIO_HOLDINGS_PATH", "data/holdings.csv"),
+        "portfolio_holdings_format": merged.get("PORTFOLIO_HOLDINGS_FORMAT", "auto"),
         "market_data_provider": merged.get("MARKET_DATA_PROVIDER", "demo"),
         "market_data_fallback_provider": merged.get("MARKET_DATA_FALLBACK_PROVIDER") or None,
         "market_data_csv_directory": merged.get("MARKET_DATA_CSV_DIRECTORY", "data/prices"),

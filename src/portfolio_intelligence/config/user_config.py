@@ -7,6 +7,8 @@ from portfolio_intelligence.config.paths import AppPaths
 DEFAULT_CONFIG = """# Portfolio Intelligence & Risk Engine
 active_portfolio_name = "demo"
 portfolio_source = "demo"
+portfolio_holdings_path = "data/holdings.csv"
+portfolio_holdings_format = "auto"
 base_currency = "USD"
 benchmark_symbol = "SPY"
 market_data_provider = "demo"
