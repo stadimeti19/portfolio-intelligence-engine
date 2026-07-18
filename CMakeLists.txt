@@ -10,6 +10,7 @@ include_directories(cpp/include)
 add_library(portfolio_engine_core
   cpp/src/analytics.cpp
 )
+set_target_properties(portfolio_engine_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(portfolio_engine_core PUBLIC cpp/include)
 
 set(PYBIND11_FINDPYTHON ON)
