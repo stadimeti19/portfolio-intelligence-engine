@@ -4,7 +4,7 @@ Local-first portfolio accounting, market-data ingestion, performance analytics, 
 
 This project is for investors, builders, and researchers who want deterministic portfolio analytics they can run locally. It reconstructs holdings from transactions, values them with demo, CSV, or live market data, and computes performance/risk metrics without sending portfolio data to a hosted service.
 
-It is not a stock chatbot and it is not financial advice. Accounting and risk numbers are computed by deterministic application code.
+**It is not a stock chatbot and it is not financial advice**. Accounting and risk numbers are computed by deterministic application code.
 
 ## What It Does
 
