@@ -48,6 +48,25 @@ percent contribution = component contribution / volatility
 
 Component contributions reconcile to portfolio volatility within numerical tolerance.
 
+The stateful native API also supports exponentially weighted covariance, fixed-intensity shrinkage
+toward the sample diagonal, and diagonal covariance. Exponential weights decay backward from the
+newest observation and use the normalized-weight unbiased denominator `1 - sum(w²)`. Estimator
+results report symmetry, positive-semidefinite status, effective rank, and exact spectral diagnostics
+for matrices up to 64 assets. Larger matrices explicitly mark spectral values unavailable rather
+than silently reporting an approximation as exact.
+
+## Native Simulation
+
+Parametric simulation draws daily correlated normal asset returns from the supplied covariance and
+historical asset means, aggregates them with the supplied weights, and compounds them across the
+configured horizon. Historical bootstrap samples complete historical return columns so cross-asset
+relationships within each observation are retained.
+
+Random streams use `std::mt19937_64`, seeded independently for fixed 256-path blocks from the user
+seed. Blocks write to fixed output ranges, making results independent of worker scheduling and thread
+count for a fixed build. Simulation VaR and Expected Shortfall use the same positive-loss convention
+as historical tail risk.
+
 ## Attribution
 
 Initial attribution uses starting portfolio weight times asset return. Periods containing trades or external flows are marked as approximate in report limitations.

@@ -6,6 +6,36 @@ This project is for investors, builders, and researchers who want deterministic 
 
 **It is not a stock chatbot and it is not financial advice**. Accounting and risk numbers are computed by deterministic application code.
 
+## Core C++20 Engine
+
+The performance-sensitive core is a standalone C++20 library, not just a group of Python helper
+functions. Python remains the orchestration layer; validated, contiguous numerical arrays cross the
+pybind11 boundary into native code.
+
+- Stateful batch valuation and incremental price/position/cash updates.
+- Numerically stable running variance, covariance, beta, rolling volatility, and drawdown state.
+- Sample, exponentially weighted, diagonal, and fixed-intensity shrinkage covariance estimators
+  with matrix diagnostics.
+- Deterministic multi-threaded normal and historical-bootstrap simulation.
+- Strict NumPy inputs and GIL release during long native operations.
+- An independent native demo, CTest suite, sanitizer options, fuzz target, and reproducible JSON
+  benchmarks.
+
+```text
+┌─────────────────────────────────────────┐
+│ Python CLI, SDK, providers, and reports │
+└──────────────────┬──────────────────────┘
+                   │ pybind11 / NumPy
+┌──────────────────▼──────────────────────┐
+│ Native C++20 Portfolio Engine           │
+│ Valuation │ State │ Risk │ Simulation  │
+└─────────────────────────────────────────┘
+```
+
+The native layer intentionally does not parse broker files, call APIs, access SQLite, render
+reports, or implement a home-grown optimizer. See the [architecture](docs/architecture.md) and
+[measured performance report](docs/performance.md) for the boundary and current limitations.
+
 ## What It Does
 
 - Reconstructs a portfolio from transaction CSV files.
@@ -476,27 +506,65 @@ print(report.risk.expected_shortfall)
 ## Architecture
 
 ```text
-Portfolio transactions + market data + ETF compositions
+Python providers, accounting, storage, SDK, CLI, and reports
+        ↓ normalized contiguous arrays
+pybind11 boundary (strict dtype/shape checks; GIL released for native work)
         ↓
-Validation and normalization
-        ↓
-Portfolio accounting
-        ↓
-Return, risk, ETF, and scenario services
-        ↓
-Scenario analysis
-        ↓
-Typed AnalysisReport
-        ↓
-CLI, HTML renderer, and local dashboard
+C++20 valuation, incremental state, covariance, risk, and simulation
 ```
 
-The C++ layer owns deterministic numerical analytics. Python application services orchestrate
-accounting, risk, ETF, and scenario calculations into typed reports. The CLI selects commands; the
+The C++ layer owns deterministic numerical analytics and state. Python application services
+orchestrate accounting, risk, ETF, and scenario calculations into typed reports. The CLI selects commands; the
 Jinja2/Plotly renderer and Streamlit dashboard only present typed values and invoke SDK/service APIs.
 Neither visual layer owns a second implementation of financial formulas.
 
 Provider-specific response objects stay inside provider modules. Application services see normalized domain models such as `PriceBar`, `Quote`, `Dividend`, and `StockSplit`.
+
+## Native Build And Validation
+
+The Python package build compiles the extension through scikit-build-core. Native-only builds can
+skip pybind11 entirely:
+
+```bash
+cmake -S . -B build/native -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native
+ctest --test-dir build/native --output-on-failure
+./build/native/portfolio-engine-demo 100000
+```
+
+From an installed development environment:
+
+```bash
+make test
+make demo-native
+make benchmark-report
+make sanitize-address
+make sanitize-undefined
+make sanitize-thread       # run separately; incompatible with ASan/UBSan
+make fuzz                  # Clang/libFuzzer, 30-second local run
+```
+
+Python usage with already-normalized NumPy arrays:
+
+```python
+import portfolio_engine as native
+
+engine = native.PortfolioAnalyticsEngine(
+    native.EngineConfig(annualization_factor=252.0, confidence_level=0.95)
+)
+engine.load_history(
+    symbols,
+    timestamps,             # contiguous int64 [observations]
+    prices,                 # contiguous float64 [observations, assets]
+    quantities,             # contiguous float64 [observations, assets]
+    cash_balances,          # contiguous float64 [observations]
+    external_cash_flows,    # contiguous float64 [observations]
+)
+risk = engine.calculate_risk()
+```
+
+The C++ API uses the same core directly; see
+[`cpp/apps/engine_demo.cpp`](cpp/apps/engine_demo.cpp) for a complete executable example.
 
 ## Testing
 

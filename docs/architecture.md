@@ -3,26 +3,53 @@
 Portfolio Intelligence & Risk Engine is layered so numerical calculations can be tested and reused outside the CLI.
 
 ```text
-Portfolio, market data, and ETF compositions
+Python providers, accounting, storage, SDK, CLI, and reports
+        ↓ normalized contiguous arrays
+pybind11 boundary
         ↓
-Validation and normalization
-        ↓
-Portfolio accounting
-        ↓
-Return, risk, look-through, overlap, and concentration analytics
-        ↓
-Scenario analysis and future rebalancing
-        ↓
-SDK, CLI, and future visual reports
+C++20 valuation, incremental state, covariance, risk, and simulation
 ```
 
 ## C++ Responsibilities
 
-The `portfolio_engine` C++ library owns deterministic numerical analytics: returns, annualization, volatility, Sharpe, Sortino, drawdown, beta, historical VaR, Expected Shortfall, covariance, correlation, risk contribution, and direct scenario shock arithmetic. It has no knowledge of HTTP, environment variables, SQLite, CLI formatting, AI, or provider response formats.
+The `portfolio_engine_core` target is organized by implemented responsibility rather than by a
+large aspirational directory tree:
+
+- `analytics.cpp`: stateless return, risk, matrix, contribution, and scenario kernels retained for
+  API compatibility;
+- `engine.cpp`: normalized batch valuation plus the stateful `PortfolioAnalyticsEngine`;
+- `incremental_statistics.cpp`: Welford-style running variance/covariance, rolling volatility, and
+  online drawdown;
+- `covariance.cpp`: sample, exponentially weighted, shrinkage, and diagonal estimators with
+  diagnostics;
+- `simulation.cpp`: deterministic fixed-block, multi-threaded normal and historical-bootstrap
+  simulation.
+
+The engine accepts row-major contiguous arrays. A history contains stable symbol order, strictly
+increasing timestamps, prices, quantities, cash balances, and external cash flows. Python completes
+accounting and date normalization first. C++ computes position values, invested/total value, asset
+weights, and cash-flow-adjusted portfolio returns without accessing Python objects.
+
+The engine owns its copied history summaries and current state. Public methods use an internal
+mutex; simulation is a stateless operation that writes each path to a disjoint output slot. Random
+streams are assigned to fixed 256-path blocks, so a fixed seed produces the same path array
+regardless of worker count.
+
+Bindings accept exact C-contiguous `float64`/`int64` arrays. They reject dtype or layout conversion,
+inspect buffers while holding the GIL, then release it before native calculation. Returned arrays
+own their Python memory and do not expose native pointers.
 
 ## Python Responsibilities
 
 Python owns configuration, CSV ingestion, transaction validation, portfolio accounting, market-data normalization, report models, storage, SDK ergonomics, and CLI presentation. The SDK calls C++ for authoritative analytics through the `portfolio_engine` binding, with a development fallback used only when the extension has not yet been built.
+
+The complete transaction ledger intentionally remains in Python. Current evidence does not show
+parsing or average-cost bookkeeping as a bottleneck, and those operations are tightly coupled to
+provider normalization and domain validation. Only normalized valuation state crosses into C++.
+
+Cost-aware optimization is also not exposed yet. The repository has no tested convex-solver
+dependency, and a bespoke projected-gradient implementation would not satisfy the solver-status,
+infeasibility, and constraint guarantees expected of this feature.
 
 ## Provider Architecture
 

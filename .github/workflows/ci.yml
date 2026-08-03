@@ -22,11 +22,67 @@ jobs:
         run: python -m mypy src/portfolio_intelligence
       - name: Python tests
         run: python -m pytest tests
-      - name: C++ tests
+      - name: Native release build and tests
         run: |
-          cmake -S . -B build/cmake
+          cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build/cmake
           ctest --test-dir build/cmake --output-on-failure
+          ./build/cmake/portfolio-engine-demo 1000
+      - name: Extension import smoke test
+        run: python -c "import portfolio_engine; assert hasattr(portfolio_engine, 'PortfolioAnalyticsEngine')"
       - name: Package build
         run: python -m pip wheel . -w dist
 
+  native-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure native-only debug build
+        run: >-
+          cmake -S . -B build/debug
+          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
+          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
+          -DCMAKE_BUILD_TYPE=Debug
+      - name: Build and test
+        run: |
+          cmake --build build/debug --parallel 2
+          ctest --test-dir build/debug --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitizer:
+          - name: address
+            cmake_flag: PORTFOLIO_ENGINE_ENABLE_ASAN
+          - name: undefined
+            cmake_flag: PORTFOLIO_ENGINE_ENABLE_UBSAN
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ${{ matrix.sanitizer.name }} sanitizer
+        run: >-
+          cmake -S . -B build/sanitizer
+          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
+          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
+          -D${{ matrix.sanitizer.cmake_flag }}=ON
+          -DCMAKE_BUILD_TYPE=Debug
+      - name: Build and test
+        run: |
+          cmake --build build/sanitizer --parallel 2
+          ctest --test-dir build/sanitizer --output-on-failure
+
+  thread-sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ThreadSanitizer
+        run: >-
+          cmake -S . -B build/tsan
+          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
+          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
+          -DPORTFOLIO_ENGINE_ENABLE_TSAN=ON
+          -DCMAKE_BUILD_TYPE=Debug
+      - name: Build and test threaded simulation
+        run: |
+          cmake --build build/tsan --parallel 2
+          ctest --test-dir build/tsan --output-on-failure
