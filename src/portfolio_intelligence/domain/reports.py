@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from portfolio_intelligence.domain.etfs import EtfExposureReport
 from portfolio_intelligence.domain.portfolios import PortfolioSnapshot
 from portfolio_intelligence.domain.positions import Position
 from portfolio_intelligence.domain.scenarios import ScenarioResult
@@ -58,6 +59,7 @@ class AnalysisReport(BaseModel):
     risk: RiskReport
     benchmark_comparison: BenchmarkComparison
     exposure: dict[str, dict[str, float]]
+    etf_exposure: EtfExposureReport | None = None
     correlations: dict[str, dict[str, float]]
     scenario_results: list[ScenarioResult] = Field(default_factory=list)
     data_freshness: dict[str, str | bool]

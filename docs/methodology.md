@@ -52,7 +52,78 @@ Component contributions reconcile to portfolio volatility within numerical toler
 
 Initial attribution uses starting portfolio weight times asset return. Periods containing trades or external flows are marked as approximate in report limitations.
 
+## ETF Direct, Indirect, And Effective Exposure
+
+For a company `i`, direct exposure is the current market value held outside an ETF. For ETF `f`,
+constituent-level indirect exposure is:
+
+```text
+indirect exposure(i, f) = ETF market value(f) * constituent weight(i, f)
+```
+
+Effective company exposure is direct exposure plus indirect exposure from every held ETF. All
+weights are decimal fractions. ETF wrapper values remain visible as direct holdings but have zero
+effective company value after successful look-through, preventing double counting. If retrieval
+fails, the wrapper is retained as an effective unknown security and a warning is emitted.
+
+Totals below 100% are reconciled with explicit `OTHER`; cash is explicit `CASH`. Totals up to the
+configured tolerance above 100% are normalized to 100%, while larger totals are rejected. Duplicate
+symbols are combined by default; providers may request rejection instead.
+
+## Effective Sector Exposure
+
+Direct companies use the local asset classification. Each ETF uses one method:
+
+1. `constituent`: all reported security constituents have sectors, so indirect values are assigned
+   individually.
+2. `etf_sector_allocation`: constituent sectors are incomplete and the provider supplies a
+   fund-level allocation; the fund value is multiplied by those weights.
+3. `unclassified`: neither source is available, so fund value is assigned to `Unknown` and warned.
+
+The method accompanies every sector result. Using one method per ETF prevents double counting.
+Sector values reconcile to invested value when provider weights reconcile.
+
+## ETF Overlap
+
+Let `w(A,i)` and `w(B,i)` be weights of security `i` in ETFs A and B:
+
+```text
+overlap(A, B) = sum(i in intersection(A, B)) min(w(A,i), w(B,i))
+```
+
+This is symmetric, ranges from zero to one for valid normalized compositions, and is 100% for
+identical fully reported funds. Cash and `OTHER` are excluded. Top overlaps are ordered by their
+individual `min` contribution. Sector overlap applies the same formula after aggregating
+constituents by sector; it can differ from a provider's separate sector table.
+
+## Effective Concentration
+
+Company and sector warning weights use total portfolio value, including portfolio cash. HHI uses
+effective non-cash security values normalized across invested exposure:
+
+```text
+p_i = effective value_i / sum(effective non-cash security values)
+HHI = sum(p_i ^ 2)
+effective number of holdings = 1 / HHI
+```
+
+A single holding has HHI 1. Equal exposure to `N` companies has HHI `1/N`. `OTHER` remains in HHI
+because it is real unreconciled invested exposure and is not assumed to be diversified. Warning
+thresholds for company weight, sector weight, and ETF overlap are configurable; warnings are not
+investment recommendations.
+
+## Composition Freshness And Limitations
+
+Provenance includes provider, as-of date, retrieval time, quality, fallback, and stale status. Cache
+TTL determines when refresh is attempted; the stale-after window determines when the underlying
+composition date is labeled stale. If stale-cache use is enabled, expired cache data may be returned
+after refresh failure and is explicitly marked stale.
+
+ETF disclosures can lag trading, providers may omit small positions, derivatives may not map to
+issuers, sector taxonomies differ, and weights move between disclosures. Look-through is therefore
+an estimate for the reported date, not a real-time fund ledger. Alpha Vantage access and permissible
+use depend on the user's plan and provider terms.
+
 ## Scenario Analysis
 
 Scenarios are typed YAML files containing symbol, sector, and asset-type shocks. Shocks are additive. Cash is unchanged by default. No arbitrary expressions are evaluated.
-

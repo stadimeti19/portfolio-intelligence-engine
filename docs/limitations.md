@@ -7,8 +7,11 @@
 - Correlations and betas change through time.
 - Scenario analysis is simplified and assumes immediate linear price shocks.
 - Market data may be delayed, stale, adjusted differently, or incomplete once live providers are added.
+- ETF compositions can be stale or incomplete, may omit derivatives, and can use different sector
+  taxonomies. Missing `OTHER` allocations are intentionally not inferred.
+- Provider entitlements, rate limits, storage, and redistribution restrictions remain the user's
+  responsibility.
 - Taxes, wash sales, corporate actions, and complex cost-basis elections are not modeled in the MVP.
-- Transaction costs and turnover-aware optimization are future work.
+- Rebalancing, transaction costs, and turnover-aware optimization are future work.
 - Backtests can be overfit.
 - Sharpe and Sortino ratios are uncertain estimates and should not be overemphasized.
-

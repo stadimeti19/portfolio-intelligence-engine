@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from itertools import combinations
 from pathlib import Path
 
 import typer
@@ -12,7 +13,13 @@ from portfolio_intelligence.cli.setup import run_setup
 from portfolio_intelligence.config.paths import AppPaths
 from portfolio_intelligence.config.settings import Settings, load_settings
 from portfolio_intelligence.config.user_config import write_default_config
+from portfolio_intelligence.domain.assets import AssetType
+from portfolio_intelligence.providers.etf.factory import (
+    build_etf_composition_provider,
+    etf_provider_status,
+)
 from portfolio_intelligence.providers.market_data.cache import MarketDataCache
+from portfolio_intelligence.providers.market_data.demo import DEMO_ASSETS
 from portfolio_intelligence.providers.market_data.errors import MarketDataError
 from portfolio_intelligence.providers.market_data.factory import (
     build_market_data_provider,
@@ -34,6 +41,7 @@ from portfolio_intelligence.providers.portfolio.holdings_snapshot import (
     write_snapshot_transactions,
 )
 from portfolio_intelligence.sdk import PortfolioAnalyzer
+from portfolio_intelligence.services.etf_exposure_service import calculate_etf_overlap
 from portfolio_intelligence.services.report_service import ReportService
 from portfolio_intelligence.storage.database import engine_from_url
 from portfolio_intelligence.storage.schema import initialize_database
@@ -68,7 +76,16 @@ def _portfolio_source(settings: Settings) -> PortfolioSource:
 def _analyzer() -> PortfolioAnalyzer:
     settings = _settings()
     market_data = build_market_data_provider(settings)
-    return PortfolioAnalyzer(_portfolio_source(settings), market_data)
+    etf_composition = build_etf_composition_provider(settings)
+    return PortfolioAnalyzer(
+        _portfolio_source(settings),
+        market_data,
+        etf_composition_provider=etf_composition,
+        etf_symbols=set(_portfolio_etf_symbols(settings)),
+        position_concentration_threshold=settings.position_concentration_threshold,
+        sector_concentration_threshold=settings.sector_concentration_threshold,
+        overlap_warning_threshold=settings.etf_overlap_warning_threshold,
+    )
 
 
 def _portfolio_symbols(settings: Settings) -> tuple[list[str], date]:
@@ -134,6 +151,44 @@ def sync_prices(symbol: str | None = typer.Option(None, "--symbol")) -> None:
 @sync_app.command("corporate-actions")
 def sync_corporate_actions(symbol: str | None = typer.Option(None, "--symbol")) -> None:
     _sync_corporate_actions(symbol=symbol)
+
+
+@sync_app.command("etfs")
+def sync_etfs(format: str = typer.Option("table", "--format")) -> None:
+    settings = _settings()
+    provider = build_etf_composition_provider(settings)
+    symbols = _configured_etf_symbols(settings, _portfolio_symbols(settings)[0])
+    payload: list[dict[str, object]] = []
+    for symbol in symbols:
+        try:
+            refresh = getattr(provider, "refresh", None)
+            if callable(refresh):
+                metadata = refresh(symbol)
+            else:
+                provider.get_holdings(symbol)
+                metadata = provider.get_metadata(symbol)
+        except Exception as exc:
+            payload.append({"symbol": symbol, "status": "FAIL", "detail": str(exc)})
+        else:
+            payload.append(
+                {
+                    "symbol": symbol,
+                    "status": "OK",
+                    "detail": (
+                        f"as of {metadata.as_of_date or 'unknown'} via {metadata.provider.value}"
+                    ),
+                }
+            )
+    if format == "json":
+        print_json(payload)
+        return
+    table(
+        "ETF composition sync",
+        ["Symbol", "Status", "Detail"],
+        [[str(row["symbol"]), str(row["status"]), str(row["detail"])] for row in payload],
+    )
+    if any(row["status"] == "FAIL" for row in payload):
+        raise typer.Exit(1)
 
 
 def _sync_prices(symbol: str | None) -> None:
@@ -241,7 +296,8 @@ def data_status(format: str = typer.Option("table", "--format")) -> None:
 
 @app.command("provider-status")
 def provider_status(format: str = typer.Option("table", "--format")) -> None:
-    statuses = load_provider_status(_settings())
+    settings = _settings()
+    statuses = load_provider_status(settings) + etf_provider_status(settings)
     if format == "json":
         print_json(statuses)
         return
@@ -487,8 +543,7 @@ def _handle_holdings_import(
                 f"{holding.quantity:.6g}",
                 money(holding.average_cost_basis or holding.synthetic_purchase_price),
                 money(
-                    holding.cost_basis_total
-                    or holding.synthetic_purchase_price * holding.quantity
+                    holding.cost_basis_total or holding.synthetic_purchase_price * holding.quantity
                 ),
                 holding.asset_type or "n/a",
             ]
@@ -625,8 +680,77 @@ def risk(format: str = typer.Option("table", "--format")) -> None:
 
 
 @app.command()
-def exposure(format: str = typer.Option("table", "--format")) -> None:
+def exposure(
+    look_through: bool = typer.Option(False, "--look-through"),
+    security: bool = typer.Option(False, "--security"),
+    sector: bool = typer.Option(False, "--sector"),
+    format: str = typer.Option("table", "--format"),
+) -> None:
     report = _analyzer().analyze()
+    effective = report.etf_exposure
+    if look_through or security or sector:
+        if effective is None:
+            raise typer.BadParameter("ETF exposure analysis is unavailable")
+        if format == "json":
+            if security and not sector:
+                print_json(effective.securities)
+            elif sector and not security:
+                print_json(effective.sectors)
+            else:
+                print_json(effective)
+            return
+        if not sector:
+            table(
+                "Effective security exposure",
+                ["Security", "Direct", "Indirect", "Effective", "ETFs", "As of"],
+                [
+                    [
+                        item.symbol,
+                        pct(item.direct_weight),
+                        pct(item.indirect_weight),
+                        pct(item.effective_weight),
+                        ", ".join(sorted(item.contributing_etfs)) or "-",
+                        ", ".join(day.isoformat() for day in item.as_of_dates) or "-",
+                    ]
+                    for item in effective.securities
+                ],
+            )
+        if not security:
+            table(
+                "Effective sector exposure",
+                ["Sector", "Weight", "Method"],
+                [
+                    [
+                        item.sector,
+                        pct(item.weight),
+                        ", ".join(method.value for method in item.methods),
+                    ]
+                    for item in effective.sectors
+                ],
+            )
+        if effective.concentration and not (security or sector):
+            table(
+                "Concentration",
+                ["Metric", "Value"],
+                [
+                    [
+                        "Largest effective security",
+                        pct(effective.concentration.largest_security_weight),
+                    ],
+                    [
+                        "Largest effective sector",
+                        pct(effective.concentration.largest_sector_weight),
+                    ],
+                    ["HHI", f"{effective.concentration.hhi:.4f}"],
+                    [
+                        "Effective holdings",
+                        f"{effective.concentration.effective_number_of_holdings:.2f}",
+                    ],
+                ],
+            )
+        for warning in effective.warnings:
+            console.print(f"[yellow]WARN[/yellow] {warning}")
+        return
     if format == "json":
         print_json(report.exposure)
         return
@@ -636,6 +760,79 @@ def exposure(format: str = typer.Option("table", "--format")) -> None:
             ["Name", "Weight"],
             [[key, pct(value)] for key, value in values.items()],
         )
+
+
+@app.command("etf-overlap")
+def etf_overlap(
+    left: str | None = typer.Argument(None),
+    right: str | None = typer.Argument(None),
+    format: str = typer.Option("table", "--format"),
+) -> None:
+    if (left is None) != (right is None):
+        raise typer.BadParameter("provide both ETF symbols or neither")
+    settings = _settings()
+    provider = build_etf_composition_provider(settings)
+    if left and right:
+        pairs = [(left.upper(), right.upper())]
+    else:
+        symbols = _configured_etf_symbols(settings, _portfolio_symbols(settings)[0])
+        pairs = list(combinations(symbols, 2))
+    results = [
+        calculate_etf_overlap(
+            first,
+            second,
+            provider.get_holdings(first),
+            provider.get_holdings(second),
+        )
+        for first, second in pairs
+    ]
+    if format == "json":
+        print_json([item.model_dump(mode="json") for item in results])
+        return
+    table(
+        "ETF overlap",
+        ["ETF pair", "Shared", "Weighted overlap", "Sector overlap", "Top overlaps"],
+        [
+            [
+                f"{item.left_symbol} / {item.right_symbol}",
+                str(len(item.shared_constituents)),
+                pct(item.weighted_overlap),
+                pct(item.sector_overlap),
+                ", ".join(str(row["symbol"]) for row in item.top_overlapping_securities[:5]) or "-",
+            ]
+            for item in results
+        ],
+    )
+
+
+def _configured_etf_symbols(settings: Settings, portfolio_symbols: list[str]) -> list[str]:
+    detected = {
+        symbol
+        for symbol in portfolio_symbols
+        if DEMO_ASSETS.get(symbol) and DEMO_ASSETS[symbol].asset_type == AssetType.ETF
+    }
+    return sorted(detected | set(_portfolio_etf_symbols(settings)))
+
+
+def _portfolio_etf_symbols(settings: Settings) -> list[str]:
+    detected = set(settings.etf_symbols)
+    portfolio_symbols, _ = _portfolio_symbols(settings)
+    detected.update(
+        symbol
+        for symbol in portfolio_symbols
+        if DEMO_ASSETS.get(symbol) and DEMO_ASSETS[symbol].asset_type == AssetType.ETF
+    )
+    if settings.portfolio_source.lower() == "holdings":
+        result = load_holdings_snapshot(
+            settings.portfolio_holdings_path,
+            source_format=settings.portfolio_holdings_format,
+        )
+        detected.update(
+            holding.symbol
+            for holding in result.holdings
+            if holding.asset_type and "ETF" in holding.asset_type.upper()
+        )
+    return sorted(detected)
 
 
 @app.command()

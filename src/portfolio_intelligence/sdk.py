@@ -8,6 +8,8 @@ from portfolio_intelligence.domain.positions import Position
 from portfolio_intelligence.domain.reports import AnalysisReport
 from portfolio_intelligence.domain.scenarios import ScenarioDefinition, ScenarioResult
 from portfolio_intelligence.domain.transactions import Transaction
+from portfolio_intelligence.providers.etf.base import EtfCompositionProvider
+from portfolio_intelligence.providers.etf.demo import DemoEtfCompositionProvider
 from portfolio_intelligence.providers.market_data.base import MarketDataProvider
 from portfolio_intelligence.providers.market_data.demo import DEMO_ASSETS, DemoMarketDataProvider
 from portfolio_intelligence.providers.portfolio.base import PortfolioSource
@@ -24,9 +26,19 @@ class PortfolioAnalyzer:
         portfolio_source: PortfolioSource,
         market_data_provider: MarketDataProvider | None = None,
         scenario_path: str | Path | None = None,
+        etf_composition_provider: EtfCompositionProvider | None = None,
+        etf_symbols: set[str] | None = None,
+        position_concentration_threshold: float = 0.25,
+        sector_concentration_threshold: float = 0.50,
+        overlap_warning_threshold: float = 0.40,
     ) -> None:
         self.portfolio_source = portfolio_source
         self.market_data_provider = market_data_provider or DemoMarketDataProvider()
+        self.etf_composition_provider = etf_composition_provider
+        self.etf_symbols = etf_symbols
+        self.position_concentration_threshold = position_concentration_threshold
+        self.sector_concentration_threshold = sector_concentration_threshold
+        self.overlap_warning_threshold = overlap_warning_threshold
         self.assets = DEMO_ASSETS
         self.scenario_path = (
             Path(scenario_path)
@@ -37,7 +49,11 @@ class PortfolioAnalyzer:
 
     @classmethod
     def demo(cls) -> PortfolioAnalyzer:
-        return cls(DemoPortfolioSource(), DemoMarketDataProvider())
+        return cls(
+            DemoPortfolioSource(),
+            DemoMarketDataProvider(),
+            etf_composition_provider=DemoEtfCompositionProvider(),
+        )
 
     @classmethod
     def from_csv(cls, path: str | Path) -> PortfolioAnalyzer:
@@ -50,7 +66,15 @@ class PortfolioAnalyzer:
         return self._transactions
 
     def analyze(self, benchmark: str = "SPY", confidence_level: float = 0.95) -> AnalysisReport:
-        service = AnalyticsService(self.market_data_provider, self.assets)
+        service = AnalyticsService(
+            self.market_data_provider,
+            self.assets,
+            position_concentration_threshold=self.position_concentration_threshold,
+            sector_concentration_threshold=self.sector_concentration_threshold,
+            etf_composition=self.etf_composition_provider,
+            etf_symbols=self.etf_symbols,
+            overlap_warning_threshold=self.overlap_warning_threshold,
+        )
         return service.analyze(
             self.transactions, benchmark=benchmark, confidence_level=confidence_level
         )

@@ -15,8 +15,10 @@ from portfolio_intelligence.domain.reports import (
     SummaryReport,
 )
 from portfolio_intelligence.domain.transactions import Transaction
+from portfolio_intelligence.providers.etf.base import EtfCompositionProvider
 from portfolio_intelligence.providers.market_data.base import MarketDataProvider
 from portfolio_intelligence.services.attribution_service import AttributionService
+from portfolio_intelligence.services.etf_exposure_service import EtfExposureService
 from portfolio_intelligence.services.portfolio_service import PortfolioService
 from portfolio_intelligence.services.risk_service import RiskService
 
@@ -28,6 +30,9 @@ class AnalyticsService:
         assets: dict[str, Asset],
         position_concentration_threshold: float = 0.25,
         sector_concentration_threshold: float = 0.50,
+        etf_composition: EtfCompositionProvider | None = None,
+        etf_symbols: set[str] | None = None,
+        overlap_warning_threshold: float = 0.40,
     ) -> None:
         self.market_data = market_data
         self.assets = assets
@@ -36,6 +41,9 @@ class AnalyticsService:
         self.attribution_service = AttributionService()
         self.position_concentration_threshold = position_concentration_threshold
         self.sector_concentration_threshold = sector_concentration_threshold
+        self.etf_composition = etf_composition
+        self.etf_symbols = etf_symbols
+        self.overlap_warning_threshold = overlap_warning_threshold
 
     def analyze(
         self,
@@ -88,6 +96,18 @@ class AnalyticsService:
             self.position_concentration_threshold,
             self.sector_concentration_threshold,
         )
+        etf_exposure = EtfExposureService(
+            self.etf_composition,
+            self.assets,
+            security_concentration_threshold=self.position_concentration_threshold,
+            sector_concentration_threshold=self.sector_concentration_threshold,
+            overlap_warning_threshold=self.overlap_warning_threshold,
+        ).analyze(
+            holdings,
+            total_portfolio_value=current.total_portfolio_value,
+            look_through=True,
+            etf_symbols=self.etf_symbols,
+        )
 
         return AnalysisReport(
             summary=SummaryReport(
@@ -117,7 +137,11 @@ class AnalyticsService:
                 historical_var=var_value,
                 expected_shortfall=es_value,
                 risk_contribution=risk_contrib,
-                concentration_warnings=warnings,
+                concentration_warnings=list(
+                    dict.fromkeys(warnings + etf_exposure.concentration.warnings)
+                )
+                if etf_exposure.concentration
+                else warnings,
             ),
             benchmark_comparison=BenchmarkComparison(
                 benchmark=benchmark,
@@ -130,6 +154,7 @@ class AnalyticsService:
                 tracking_error=tracking_error,
             ),
             exposure=exposure,
+            etf_exposure=etf_exposure,
             correlations=correlations,
             data_freshness={
                 "portfolio_source": "csv/demo",
@@ -137,12 +162,21 @@ class AnalyticsService:
                 "data_date": current.date.isoformat(),
                 "synthetic": True,
                 "fallback_used": False,
+                "etf_composition_provider": (
+                    self.etf_composition.name if self.etf_composition else "unavailable"
+                ),
+                "etf_composition_as_of": ",".join(
+                    f"{symbol}:{as_of.isoformat() if as_of else 'unknown'}"
+                    for symbol, as_of in etf_exposure.data_as_of.items()
+                ),
             },
             limitations=[
                 "Demo data is synthetic and not investment advice.",
                 "Attribution is approximate when the period contains cash flows or trades.",
                 "Historical VaR is a quantile of observed daily returns, "
                 "not a maximum-loss estimate.",
+                "ETF look-through reflects provider composition dates and can differ "
+                "from current holdings.",
             ],
         )
 

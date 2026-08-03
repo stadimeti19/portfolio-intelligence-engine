@@ -28,9 +28,17 @@ class Settings(BaseModel):
     price_cache_ttl_hours: int = 12
     corporate_action_cache_ttl_hours: int = 24
     allow_stale_cache: bool = True
+    etf_composition_provider: str = "demo"
+    etf_composition_fallback_provider: str | None = None
+    etf_composition_csv_directory: str = "data/etfs"
+    etf_composition_cache_ttl_hours: int = 24
+    etf_composition_stale_after_days: int = 45
+    etf_weight_tolerance: float = 0.01
+    etf_symbols: list[str] = Field(default_factory=list)
     confidence_level: float = 0.95
     position_concentration_threshold: float = 0.25
     sector_concentration_threshold: float = 0.50
+    etf_overlap_warning_threshold: float = 0.40
     enable_ai: bool = False
     openai_model: str | None = None
     extra: dict[str, str] = Field(default_factory=dict)
@@ -57,21 +65,38 @@ def load_settings(
         "twelve_data_api_key": merged.get("TWELVE_DATA_API_KEY") or None,
         "alpha_vantage_api_key": merged.get("ALPHA_VANTAGE_API_KEY") or None,
         "finnhub_api_key": merged.get("FINNHUB_API_KEY") or None,
-        "market_data_timeout_seconds": int(
-            str(merged.get("MARKET_DATA_TIMEOUT_SECONDS", "15"))
-        ),
+        "market_data_timeout_seconds": int(str(merged.get("MARKET_DATA_TIMEOUT_SECONDS", "15"))),
         "market_data_max_retries": int(str(merged.get("MARKET_DATA_MAX_RETRIES", "3"))),
         "price_cache_ttl_hours": int(str(merged.get("PRICE_CACHE_TTL_HOURS", "12"))),
         "corporate_action_cache_ttl_hours": int(
             str(merged.get("CORPORATE_ACTION_CACHE_TTL_HOURS", "24"))
         ),
         "allow_stale_cache": str(merged.get("ALLOW_STALE_CACHE", "true")).lower() == "true",
+        "etf_composition_provider": merged.get("ETF_COMPOSITION_PROVIDER", "demo"),
+        "etf_composition_fallback_provider": merged.get("ETF_COMPOSITION_FALLBACK_PROVIDER")
+        or None,
+        "etf_composition_csv_directory": merged.get("ETF_COMPOSITION_CSV_DIRECTORY", "data/etfs"),
+        "etf_composition_cache_ttl_hours": int(
+            str(merged.get("ETF_COMPOSITION_CACHE_TTL_HOURS", "24"))
+        ),
+        "etf_composition_stale_after_days": int(
+            str(merged.get("ETF_COMPOSITION_STALE_AFTER_DAYS", "45"))
+        ),
+        "etf_weight_tolerance": float(str(merged.get("ETF_WEIGHT_TOLERANCE", "0.01"))),
+        "etf_symbols": [
+            item.strip().upper()
+            for item in str(merged.get("ETF_SYMBOLS", "")).split(",")
+            if item.strip()
+        ],
         "confidence_level": float(str(merged.get("CONFIDENCE_LEVEL", "0.95"))),
         "position_concentration_threshold": float(
             str(merged.get("POSITION_CONCENTRATION_THRESHOLD", "0.25"))
         ),
         "sector_concentration_threshold": float(
             str(merged.get("SECTOR_CONCENTRATION_THRESHOLD", "0.50"))
+        ),
+        "etf_overlap_warning_threshold": float(
+            str(merged.get("ETF_OVERLAP_WARNING_THRESHOLD", "0.40"))
         ),
         "enable_ai": str(merged.get("ENABLE_AI", "false")).lower() == "true",
         "openai_model": merged.get("OPENAI_MODEL") or None,

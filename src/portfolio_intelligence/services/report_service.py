@@ -35,6 +35,26 @@ class ReportService:
                 f"- {position.symbol}: {position.quantity:.4f} shares, "
                 f"${position.market_value:,.2f}, {position.weight:.1%}"
             )
+        if report.etf_exposure:
+            lines.extend(["", "## Effective Exposure"])
+            for security_item in report.etf_exposure.securities:
+                if security_item.effective_value <= 0:
+                    continue
+                contributors = ", ".join(sorted(security_item.contributing_etfs)) or "none"
+                lines.append(
+                    f"- {security_item.symbol}: direct {security_item.direct_weight:.1%}, "
+                    f"indirect {security_item.indirect_weight:.1%}, effective "
+                    f"{security_item.effective_weight:.1%}; ETFs: {contributors}"
+                )
+            lines.extend(["", "## Effective Sectors"])
+            for sector_item in report.etf_exposure.sectors:
+                methods = ", ".join(method.value for method in sector_item.methods)
+                lines.append(f"- {sector_item.sector}: {sector_item.weight:.1%} ({methods})")
+            if report.etf_exposure.warnings:
+                lines.extend(
+                    ["", "## ETF Data and Concentration Warnings"]
+                    + [f"- {item}" for item in report.etf_exposure.warnings]
+                )
         if report.limitations:
             lines.extend(["", "## Limitations", *[f"- {item}" for item in report.limitations]])
         return "\n".join(lines) + "\n"

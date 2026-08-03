@@ -19,6 +19,8 @@ It is not a stock chatbot and it is not financial advice. Accounting and risk nu
   - [Alpha Vantage](https://www.alphavantage.co/) as an optional fallback.
   - Local CSV price files.
 - Caches live provider responses locally with freshness, provenance, checksum, completeness, and stale/fallback metadata.
+- Looks through ETFs to combine direct and indirect company and sector exposure.
+- Measures ETF overlap, effective concentration, HHI, and effective number of holdings.
 - Handles provider retries, timeouts, rate limits, stale-cache policy, and provider health diagnostics.
 - Computes returns, volatility, Sharpe, Sortino, drawdown, beta, historical VaR, Expected Shortfall, covariance, correlation, and risk contribution.
 - Runs YAML scenario shocks by symbol, sector, and asset type.
@@ -211,6 +213,12 @@ portfolio summary
 portfolio performance
 portfolio risk
 portfolio exposure
+portfolio exposure --look-through
+portfolio exposure --security
+portfolio exposure --sector
+portfolio etf-overlap
+portfolio etf-overlap VOO QQQ
+portfolio sync etfs
 portfolio correlations
 portfolio scenario list
 portfolio scenario run tech-selloff
@@ -270,6 +278,15 @@ MARKET_DATA_MAX_RETRIES=3
 PRICE_CACHE_TTL_HOURS=12
 CORPORATE_ACTION_CACHE_TTL_HOURS=24
 ALLOW_STALE_CACHE=true
+
+ETF_COMPOSITION_PROVIDER=demo
+ETF_COMPOSITION_FALLBACK_PROVIDER=
+ETF_COMPOSITION_CSV_DIRECTORY=data/etfs
+ETF_COMPOSITION_CACHE_TTL_HOURS=24
+ETF_COMPOSITION_STALE_AFTER_DAYS=45
+ETF_WEIGHT_TOLERANCE=0.01
+ETF_SYMBOLS=VOO,QQQ
+ETF_OVERLAP_WARNING_THRESHOLD=0.40
 ```
 
 Provider choices:
@@ -279,6 +296,58 @@ Provider choices:
 - `twelvedata`: live Twelve Data adapter.
 - `finnhub`: live Finnhub adapter.
 - `alphavantage`: live Alpha Vantage adapter.
+
+ETF composition providers are configured separately:
+
+- `demo`: synthetic VOO/QQQ/SPY compositions for offline use.
+- `csv`: local compositions with no provider redistribution dependency.
+- `alphavantage`: the Alpha Vantage `ETF_PROFILE` endpoint. Availability, rate limits,
+  entitlements, retention, and redistribution are controlled by the provider's plan and terms.
+
+A per-fund CSV such as `data/etfs/VOO.csv` uses decimal or percentage weights:
+
+```csv
+constituent_symbol,name,weight,sector,allocation_type,as_of_date
+AAPL,Apple Inc.,7.0%,Technology,security,2026-07-31
+MSFT,Microsoft Corp.,6.5%,Technology,security,2026-07-31
+CASH,Cash,0.5%,Cash,cash,2026-07-31
+```
+
+A consolidated `etf_holdings.csv` adds a `fund_symbol` column. Optional
+`etf_sectors.csv` and `etf_metadata.csv` files provide fund-level sectors and metadata. For holdings
+snapshots, `asset_type=ETF` identifies funds automatically. Transaction CSVs have no asset-type
+field, so list their funds in `ETF_SYMBOLS`.
+
+Duplicate constituents are combined by default. Totals materially above 100% are rejected; totals
+below 100% receive an explicit `OTHER` allocation.
+
+## ETF Look-Through And Concentration
+
+Direct exposure is the market value held in a company itself. Indirect exposure is ETF market value
+multiplied by constituent weight. Effective company exposure adds direct and all indirect exposure.
+For example, $5,000 of AAPL held directly plus $1,200 through VOO and $800 through QQQ produces
+$7,000 of effective AAPL exposure.
+
+Effective sectors use constituent classifications when complete. If they are unavailable, the
+engine uses the ETF-provided sector allocation for the whole fund. Output labels the method as
+`direct`, `constituent`, `etf_sector_allocation`, or `unclassified`.
+
+For ETFs A and B, weighted overlap is:
+
+```text
+weighted overlap(A, B) = sum over shared securities i of min(weight_A_i, weight_B_i)
+```
+
+Identical fully reported funds have 100% overlap. Cash and `OTHER` are excluded. Sector overlap
+applies the same formula to constituent-derived sector totals.
+
+Concentration output includes the largest effective company and sector weights, top five holdings,
+HHI, effective number of holdings, and configurable warnings. HHI normalizes effective company
+exposure across invested non-cash value; effective number of holdings is `1 / HHI`.
+
+Composition dates can lag current prices and holdings can change between disclosures. Stale data is
+labeled and missing weights remain `OTHER`; the engine does not silently redistribute them. See
+[the methodology](docs/methodology.md) for complete definitions.
 
 ## Cache And Freshness
 
@@ -348,7 +417,9 @@ make test
 python -m ruff check src tests
 ```
 
-Python tests cover CSV parsing, validation, average-cost accounting, cash flows, demo providers, live provider parsing with mocked HTTP responses, provider fallback, cache behavior, stale-cache policy, scenarios, and the demo report path.
+Python tests cover CSV parsing, validation, average-cost accounting, cash flows, demo providers,
+live provider parsing with mocked HTTP responses, provider fallback, cache behavior, stale-cache
+policy, ETF reconciliation/overlap/concentration, scenarios, and the demo report path.
 
 Normal unit tests and CI do not make real API requests.
 
@@ -378,19 +449,18 @@ Common issues:
 - VaR is not a maximum-loss estimate.
 - Sharpe, Sortino, beta, correlations, and VaR are statistical estimates and can be unstable.
 - Live provider data can be delayed, revised, rate-limited, incomplete, or entitlement constrained.
-- Taxes, tax-lot elections, margin, shorting, multi-currency accounting, and transaction-cost optimization are not complete.
+- Taxes, tax-lot elections, margin, shorting, multi-currency accounting, and rebalancing optimization are not complete.
 
 ## Roadmap
 
-1. ETF look-through exposure and overlap.
-2. Historical stress-period library.
-3. Cost-aware constrained rebalancing.
-4. Transaction-cost and turnover reporting.
-5. Standalone HTML reports.
-6. FRED macro-data adapter.
-7. SEC EDGAR fundamentals adapter.
-8. Probabilistic and Deflated Sharpe Ratio.
-9. Optional grounded explanations.
+1. Historical stress-period library.
+2. Cost-aware constrained rebalancing.
+3. Transaction-cost and turnover reporting.
+4. Standalone HTML reports.
+5. FRED macro-data adapter.
+6. SEC EDGAR fundamentals adapter.
+7. Probabilistic and Deflated Sharpe Ratio.
+8. Optional grounded explanations.
 
 ## License
 

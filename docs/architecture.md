@@ -3,13 +3,13 @@
 Portfolio Intelligence & Risk Engine is layered so numerical calculations can be tested and reused outside the CLI.
 
 ```text
-Portfolio and market data
+Portfolio, market data, and ETF compositions
         ↓
 Validation and normalization
         ↓
 Portfolio accounting
         ↓
-Return and risk analytics
+Return, risk, look-through, overlap, and concentration analytics
         ↓
 Scenario analysis and future rebalancing
         ↓
@@ -26,7 +26,10 @@ Python owns configuration, CSV ingestion, transaction validation, portfolio acco
 
 ## Provider Architecture
 
-Provider protocols isolate external formats from application services. The MVP includes deterministic demo providers and CSV providers. Future Twelve Data, Alpha Vantage, SEC, FRED, and Plaid adapters should normalize into the same `PriceBar`, `Quote`, `Transaction`, and asset models before reaching services.
+Provider protocols isolate external formats from application services. Market-data and ETF
+composition providers are separate because price and composition freshness differ. ETF adapters
+normalize Alpha Vantage, CSV, and demo responses into `EtfHolding`, `SectorWeight`, and
+`EtfMetadata` before analytics. Both provider stacks support caching, fallback, and stale provenance.
 
 ## Storage
 
@@ -39,4 +42,3 @@ Configuration is loaded from CLI overrides, environment variables, project `.env
 ## Future Dashboard
 
 The report objects are serializable and already separate from Rich terminal formatting. A dashboard or standalone HTML report should consume the SDK rather than reimplementing calculations.
-
