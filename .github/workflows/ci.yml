@@ -16,8 +16,8 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -32,7 +32,7 @@ jobs:
   native:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: cmake -S . -B build/cmake -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/cmake --parallel 2
       - run: ctest --test-dir build/cmake --output-on-failure
@@ -41,8 +41,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: {python-version: "3.11"}
       - run: python -m pip install build check-wheel-contents twine
       - run: python -m build
@@ -56,7 +56,7 @@ jobs:
           PORTFOLIO_INTELLIGENCE_HOME=/tmp/portfolio-demo /tmp/portfolio-wheel-test/bin/portfolio doctor
           PORTFOLIO_INTELLIGENCE_HOME=/tmp/portfolio-demo /tmp/portfolio-wheel-test/bin/portfolio summary --format json
           /tmp/portfolio-wheel-test/bin/python -c "import portfolio_engine, portfolio_intelligence; assert portfolio_intelligence.__version__ == '0.1.0'"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with: {name: distributions, path: dist/*}
 
   sanitizers:
@@ -65,7 +65,7 @@ jobs:
       matrix:
         flag: [PORTFOLIO_ENGINE_ENABLE_ASAN, PORTFOLIO_ENGINE_ENABLE_UBSAN]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: cmake -S . -B build/sanitizer -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF -D${{ matrix.flag }}=ON -DCMAKE_BUILD_TYPE=Debug
       - run: cmake --build build/sanitizer --parallel 2
       - run: ctest --test-dir build/sanitizer --output-on-failure
@@ -73,6 +73,6 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {fetch-depth: 0}
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
