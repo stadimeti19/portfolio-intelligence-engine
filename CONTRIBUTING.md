@@ -7,7 +7,7 @@ Thank you for improving Portfolio Intelligence. By participating, you agree to f
 Requirements: Python 3.11–3.13, a C++20 compiler, CMake 3.20+, and Make. On macOS use current Xcode command-line tools; on Linux use GCC or Clang with pthread support.
 
 ```bash
-git clone https://github.com/sashankt19/portfolio-intelligence-engine.git
+git clone https://github.com/stadimeti19/portfolio-intelligence-engine.git
 cd portfolio-intelligence-engine
 python -m venv .venv
 source .venv/bin/activate

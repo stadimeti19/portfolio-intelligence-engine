@@ -41,10 +41,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sashankt19/portfolio-intelligence-engine"
-Documentation = "https://github.com/sashankt19/portfolio-intelligence-engine#readme"
-Issues = "https://github.com/sashankt19/portfolio-intelligence-engine/issues"
-Source = "https://github.com/sashankt19/portfolio-intelligence-engine"
+Homepage = "https://github.com/stadimeti19/portfolio-intelligence-engine"
+Documentation = "https://github.com/stadimeti19/portfolio-intelligence-engine#readme"
+Issues = "https://github.com/stadimeti19/portfolio-intelligence-engine/issues"
+Source = "https://github.com/stadimeti19/portfolio-intelligence-engine"
 
 [project.optional-dependencies]
 dashboard = [

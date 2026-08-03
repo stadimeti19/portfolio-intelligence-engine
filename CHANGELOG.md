@@ -18,5 +18,5 @@ This project follows Semantic Versioning and Keep a Changelog.
 - AI explanations are disabled by default and available only through the `ai` extra.
 - Scenario YAML uses safe loading; private and generated files are excluded from distributions.
 
-[Unreleased]: https://github.com/sashankt19/portfolio-intelligence-engine/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/sashankt19/portfolio-intelligence-engine/releases/tag/v0.1.0
+[Unreleased]: https://github.com/stadimeti19/portfolio-intelligence-engine/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/stadimeti19/portfolio-intelligence-engine/releases/tag/v0.1.0
