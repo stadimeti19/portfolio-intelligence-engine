@@ -170,6 +170,8 @@ class TwelveDataProvider:
             if message != str(exc):
                 raise type(exc)(message) from exc
             raise
+        if not isinstance(response.payload, dict):
+            raise InvalidResponseError("Twelve Data returned a non-object JSON response")
         return response.payload
 
     def _raise_for_vendor_error(self, payload: dict[str, Any]) -> None:

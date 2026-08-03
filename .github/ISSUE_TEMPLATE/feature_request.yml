@@ -1,0 +1,10 @@
+name: Feature request
+description: Propose a focused enhancement
+body:
+  - type: textarea
+    attributes: {label: Use case, description: What technical or user problem should this solve?}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: Proposed behavior, description: Include API, CLI, methodology, and compatibility considerations.}
+  - type: textarea
+    attributes: {label: Alternatives, description: What alternatives did you consider?}

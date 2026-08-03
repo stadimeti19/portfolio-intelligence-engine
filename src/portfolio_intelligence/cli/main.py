@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from portfolio_intelligence import __version__
 from portfolio_intelligence.cli.doctor import run_doctor
 from portfolio_intelligence.cli.formatting import money, pct, print_json, table
 from portfolio_intelligence.cli.setup import run_setup
@@ -101,8 +102,24 @@ def _portfolio_symbols(settings: Settings) -> tuple[list[str], date]:
     return symbols, start
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def root(ctx: typer.Context) -> None:
+def root(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
+    del version
     if ctx.invoked_subcommand is None:
         console.print(ctx.get_help())
 

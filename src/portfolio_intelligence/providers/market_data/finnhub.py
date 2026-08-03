@@ -58,6 +58,8 @@ class FinnhubProvider:
             },
         )
         self._raise_for_vendor_error(payload)
+        if not isinstance(payload, dict):
+            raise InvalidResponseError("Finnhub returned a non-object candle response")
         status = str(payload.get("s", "")).lower()
         if status == "no_data":
             raise IncompleteHistoryError(f"no Finnhub price history returned for {symbol.upper()}")
@@ -93,6 +95,8 @@ class FinnhubProvider:
     def get_latest_quote(self, symbol: str) -> Quote:
         payload = self._get("/quote", {"symbol": symbol.upper(), "token": self.api_key})
         self._raise_for_vendor_error(payload)
+        if not isinstance(payload, dict):
+            raise InvalidResponseError("Finnhub returned a non-object quote response")
         price = _safe_float(payload.get("c"))
         if price <= 0:
             raise InvalidResponseError("Finnhub response is missing current quote price")

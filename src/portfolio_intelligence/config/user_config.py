@@ -44,4 +44,8 @@ def write_default_config(paths: AppPaths, overwrite: bool = False) -> Path:
     if paths.config_file.exists() and not overwrite:
         return paths.config_file
     paths.config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
+    try:
+        paths.config_file.chmod(0o600)
+    except OSError:
+        pass
     return paths.config_file

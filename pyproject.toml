@@ -10,6 +10,22 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Sashank Tadimeti" }]
+keywords = ["portfolio", "risk", "quantitative-finance", "analytics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Financial and Insurance Industry",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
 dependencies = [
   "Jinja2>=3.1",
   "numpy>=1.26",
@@ -18,22 +34,33 @@ dependencies = [
   "plotly>=5.20",
   "pydantic>=2.6",
   "python-dotenv>=1.0",
-  "openai>=2.37.0",
   "PyYAML>=6.0",
   "rich>=13.7",
   "SQLAlchemy>=2.0",
   "typer>=0.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/sashankt19/portfolio-intelligence-engine"
+Documentation = "https://github.com/sashankt19/portfolio-intelligence-engine#readme"
+Issues = "https://github.com/sashankt19/portfolio-intelligence-engine/issues"
+Source = "https://github.com/sashankt19/portfolio-intelligence-engine"
+
 [project.optional-dependencies]
 dashboard = [
   "streamlit>=1.35",
 ]
+ai = [
+  "openai>=2.37.0",
+]
 dev = [
+  "build>=1.2",
+  "check-wheel-contents>=0.6",
   "mypy>=1.10",
   "pybind11>=2.12",
   "pytest>=8.0",
   "ruff>=0.5",
+  "twine>=5.1",
 ]
 
 [project.scripts]
@@ -44,6 +71,27 @@ minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
 wheel.packages = ["src/portfolio_intelligence"]
 cmake.version = ">=3.20"
+sdist.include = [
+  "CHANGELOG.md",
+  "CODE_OF_CONDUCT.md",
+  "CONTRIBUTING.md",
+  "RELEASE_NOTES.md",
+  "SECURITY.md",
+]
+sdist.exclude = [
+  ".env*",
+  "!.env.example",
+  ".venv",
+  "**/__pycache__",
+  "**/*.py[cod]",
+  "build",
+  "dist",
+  "reports",
+  "logs",
+  "cache",
+  "**/*.db",
+  "**/*.sqlite*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

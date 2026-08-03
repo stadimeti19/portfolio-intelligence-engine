@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible defect without private data
+body:
+  - type: textarea
+    attributes: {label: Description, description: What happened and what did you expect?}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: Reproduction, description: Minimal commands and sanitized inputs}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: Environment, description: Version, OS, architecture, Python, compiler, and install method}
+  - type: checkboxes
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed credentials, identifiers, and private portfolio data.
+          required: true

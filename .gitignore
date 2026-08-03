@@ -28,4 +28,8 @@ __pycache__/
 .venv/
 venv/
 .tox/
-
+.coverage
+htmlcov/
+*.prof
+*.log
+.DS_Store

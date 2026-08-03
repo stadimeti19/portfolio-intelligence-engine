@@ -3,15 +3,20 @@ PYTHON_EXECUTABLE := $(shell $(PYTHON) -c 'import sys; print(sys.executable)')
 PYBIND11_DIR := $(shell $(PYTHON) -m pybind11 --cmakedir 2>/dev/null)
 PYBIND11_CMAKE_ARGS := -DPython_EXECUTABLE=$(PYTHON_EXECUTABLE) $(if $(PYBIND11_DIR),-Dpybind11_DIR=$(PYBIND11_DIR),)
 
-.PHONY: setup build demo demo-native test test-python test-cpp lint format typecheck \
+.PHONY: setup build demo demo-native test test-python test-cpp lint format typecheck package \
 	benchmark benchmark-cpp benchmark-python benchmark-report sanitize-address \
 	sanitize-undefined sanitize-thread fuzz clean
 
 setup:
-	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev,ai]"
 
 build:
-	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev,ai]"
+
+package:
+	$(PYTHON) -m build
+	$(PYTHON) -m twine check dist/*
+	$(PYTHON) -m check_wheel_contents dist/*.whl
 
 demo:
 	portfolio doctor

@@ -33,3 +33,8 @@ class AppPaths:
             self.logs_dir,
         ]:
             path.mkdir(parents=True, exist_ok=True)
+            try:
+                path.chmod(0o700)
+            except OSError:
+                # Some filesystems (notably Windows) do not expose POSIX modes.
+                pass

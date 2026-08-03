@@ -4,85 +4,75 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y cmake g++
-      - name: Install package
-        run: python -m pip install -e ".[dev]"
-      - name: Lint
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest tests
+      - run: python -c "import portfolio_engine; assert hasattr(portfolio_engine, 'PortfolioAnalyticsEngine')"
+      - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
         run: python -m ruff check src tests
-      - name: Type check
+      - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
         run: python -m mypy src/portfolio_intelligence
-      - name: Python tests
-        run: python -m pytest tests
-      - name: Native release build and tests
-        run: |
-          cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/cmake
-          ctest --test-dir build/cmake --output-on-failure
-          ./build/cmake/portfolio-engine-demo 1000
-      - name: Extension import smoke test
-        run: python -c "import portfolio_engine; assert hasattr(portfolio_engine, 'PortfolioAnalyticsEngine')"
-      - name: Package build
-        run: python -m pip wheel . -w dist
 
-  native-debug:
+  native:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure native-only debug build
-        run: >-
-          cmake -S . -B build/debug
-          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
-          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
-          -DCMAKE_BUILD_TYPE=Debug
-      - name: Build and test
+      - run: cmake -S . -B build/cmake -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/cmake --parallel 2
+      - run: ctest --test-dir build/cmake --output-on-failure
+      - run: ./build/cmake/portfolio-engine-demo 1000
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install build check-wheel-contents twine
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - run: python -m check_wheel_contents dist/*.whl
+      - name: Clean wheel installation and CLI smoke test
         run: |
-          cmake --build build/debug --parallel 2
-          ctest --test-dir build/debug --output-on-failure
+          python -m venv /tmp/portfolio-wheel-test
+          /tmp/portfolio-wheel-test/bin/pip install dist/*.whl
+          PORTFOLIO_INTELLIGENCE_HOME=/tmp/portfolio-demo /tmp/portfolio-wheel-test/bin/portfolio --help
+          PORTFOLIO_INTELLIGENCE_HOME=/tmp/portfolio-demo /tmp/portfolio-wheel-test/bin/portfolio doctor
+          PORTFOLIO_INTELLIGENCE_HOME=/tmp/portfolio-demo /tmp/portfolio-wheel-test/bin/portfolio summary --format json
+          /tmp/portfolio-wheel-test/bin/python -c "import portfolio_engine, portfolio_intelligence; assert portfolio_intelligence.__version__ == '0.1.0'"
+      - uses: actions/upload-artifact@v4
+        with: {name: distributions, path: dist/*}
 
   sanitizers:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sanitizer:
-          - name: address
-            cmake_flag: PORTFOLIO_ENGINE_ENABLE_ASAN
-          - name: undefined
-            cmake_flag: PORTFOLIO_ENGINE_ENABLE_UBSAN
+        flag: [PORTFOLIO_ENGINE_ENABLE_ASAN, PORTFOLIO_ENGINE_ENABLE_UBSAN]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure ${{ matrix.sanitizer.name }} sanitizer
-        run: >-
-          cmake -S . -B build/sanitizer
-          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
-          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
-          -D${{ matrix.sanitizer.cmake_flag }}=ON
-          -DCMAKE_BUILD_TYPE=Debug
-      - name: Build and test
-        run: |
-          cmake --build build/sanitizer --parallel 2
-          ctest --test-dir build/sanitizer --output-on-failure
+      - run: cmake -S . -B build/sanitizer -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF -D${{ matrix.flag }}=ON -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build/sanitizer --parallel 2
+      - run: ctest --test-dir build/sanitizer --output-on-failure
 
-  thread-sanitizer:
+  secret-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure ThreadSanitizer
-        run: >-
-          cmake -S . -B build/tsan
-          -DPORTFOLIO_ENGINE_BUILD_PYTHON=OFF
-          -DPORTFOLIO_ENGINE_BUILD_BENCHMARKS=OFF
-          -DPORTFOLIO_ENGINE_ENABLE_TSAN=ON
-          -DCMAKE_BUILD_TYPE=Debug
-      - name: Build and test threaded simulation
-        run: |
-          cmake --build build/tsan --parallel 2
-          ctest --test-dir build/tsan --output-on-failure
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2

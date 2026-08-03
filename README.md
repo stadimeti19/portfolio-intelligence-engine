@@ -62,6 +62,16 @@ reports, or implement a home-grown optimizer. See the [architecture](docs/archit
 
 Use the offline demo first. It does not need API keys.
 
+For an isolated installation from PyPI after release:
+
+```bash
+pipx install portfolio-intelligence
+# or
+uv tool install portfolio-intelligence
+```
+
+For a source checkout:
+
 ```bash
 git clone <this-repo-url>
 cd portfolio-intelligence-engine
@@ -624,3 +634,12 @@ Common issues:
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Release and Project Policies
+
+- **Demo:** The default uses bundled synthetic inputs, makes no network requests, and needs no credentials. Run `make demo`.
+- **Providers and provenance:** Offline demo/CSV and opt-in Twelve Data, Finnhub, and Alpha Vantage providers are documented in [docs/market_data.md](docs/market_data.md). `portfolio data-status` exposes provenance and freshness.
+- **Privacy:** Local by default; optional AI requires the `ai` extra and explicit opt-in. See [docs/privacy.md](docs/privacy.md) and [SECURITY.md](SECURITY.md).
+- **Development:** Use `make setup`, `make test`, `make benchmark`, `make demo`, and `make package`. Python 3.11–3.13, CMake 3.20+, and a C++20 compiler are required. Linux and macOS are CI-tested; Windows is not claimed.
+- **Benchmarks:** [docs/performance.md](docs/performance.md) records environments and measured workloads; no unsupported performance claims are made.
+- **Contributing:** Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
