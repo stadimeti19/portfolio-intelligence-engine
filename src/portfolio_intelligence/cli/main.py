@@ -14,10 +14,12 @@ from portfolio_intelligence.config.paths import AppPaths
 from portfolio_intelligence.config.settings import Settings, load_settings
 from portfolio_intelligence.config.user_config import write_default_config
 from portfolio_intelligence.domain.assets import AssetType
+from portfolio_intelligence.domain.explanations import ExplanationType, PortfolioExplanation
 from portfolio_intelligence.providers.etf.factory import (
     build_etf_composition_provider,
     etf_provider_status,
 )
+from portfolio_intelligence.providers.explanations.factory import build_explanation_provider
 from portfolio_intelligence.providers.market_data.cache import MarketDataCache
 from portfolio_intelligence.providers.market_data.demo import DEMO_ASSETS
 from portfolio_intelligence.providers.market_data.errors import MarketDataError
@@ -42,6 +44,7 @@ from portfolio_intelligence.providers.portfolio.holdings_snapshot import (
 )
 from portfolio_intelligence.sdk import PortfolioAnalyzer
 from portfolio_intelligence.services.etf_exposure_service import calculate_etf_overlap
+from portfolio_intelligence.services.explanation_service import prepare_explanation_request
 from portfolio_intelligence.services.report_service import ReportService
 from portfolio_intelligence.storage.database import engine_from_url
 from portfolio_intelligence.storage.schema import initialize_database
@@ -910,6 +913,87 @@ def report(
         console.print(service.to_html(analysis))
     else:
         console.print(service.to_json(analysis))
+
+
+@app.command("explain")
+def explain(
+    focus: str | None = typer.Argument(
+        None,
+        help=(
+            "summary, performance, benchmark, attribution, risk, concentration, etf-overlap, "
+            "scenario, rebalance, or limitations"
+        ),
+    ),
+    scenario_name: str | None = typer.Argument(
+        None, help="Scenario name; required only when focus is scenario."
+    ),
+    force: bool = typer.Option(False, "--force", help="Bypass the local explanation cache."),
+    format: str = typer.Option("table", "--format"),
+) -> None:
+    """Explain already-computed analytics without changing them."""
+
+    explanation_type = _explanation_type(focus)
+    if explanation_type == ExplanationType.SCENARIO and not scenario_name:
+        raise typer.BadParameter(
+            "provide a scenario name, for example: portfolio explain scenario tech-selloff"
+        )
+    if explanation_type != ExplanationType.SCENARIO and scenario_name:
+        raise typer.BadParameter(
+            "a scenario name is only valid with `portfolio explain scenario <name>`"
+        )
+
+    settings = _settings()
+    analyzer = _analyzer()
+    analysis = analyzer.analyze()
+    if scenario_name:
+        analysis = analysis.model_copy(
+            update={"scenario_results": [analyzer.run_scenario(scenario_name)]}
+        )
+    request = prepare_explanation_request(
+        analysis,
+        explanation_type,
+        send_dollar_values=settings.openai_send_dollar_values,
+        max_input_tokens=settings.openai_max_input_tokens,
+        force=force,
+    )
+    explanation = build_explanation_provider(settings).explain(request)
+    if format == "json":
+        print_json(explanation.model_dump(mode="json"))
+        return
+    _print_explanation(explanation)
+
+
+def _explanation_type(value: str | None) -> ExplanationType:
+    if value is None:
+        return ExplanationType.SUMMARY
+    aliases = {
+        "overall": "summary",
+        "return-attribution": "attribution",
+        "rebalancing": "rebalance",
+    }
+    normalized = aliases.get(value.strip().lower(), value.strip().lower())
+    try:
+        return ExplanationType(normalized)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in ExplanationType)
+        raise typer.BadParameter(
+            f"unknown explanation focus {value!r}; choose one of: {allowed}"
+        ) from exc
+
+
+def _print_explanation(explanation: PortfolioExplanation) -> None:
+    console.print(explanation.summary)
+    sections = [
+        ("Return drivers", explanation.return_drivers),
+        ("Risk findings", explanation.risk_findings),
+        ("Scenario findings", explanation.scenario_findings),
+        ("Limitations", explanation.limitations),
+    ]
+    for title, findings in sections:
+        if findings:
+            console.print(f"\n[bold]{title}[/bold]")
+            for finding in findings:
+                console.print(f"- {finding}")
 
 
 @app.command()

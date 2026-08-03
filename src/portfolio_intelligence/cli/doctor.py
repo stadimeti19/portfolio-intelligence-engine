@@ -45,5 +45,13 @@ def run_doctor() -> list[tuple[str, str, str]]:
                 status["detail"],
             )
         )
-    checks.append(("WARN", "OpenAI", "disabled"))
+    settings = load_settings()
+    if not settings.enable_ai:
+        checks.append(("WARN", "OpenAI explanations", "disabled (offline mode remains available)"))
+    elif not settings.openai_api_key:
+        checks.append(("WARN", "OpenAI explanations", "enabled but OPENAI_API_KEY is missing"))
+    else:
+        checks.append(
+            ("PASS", "OpenAI explanations", f"enabled with model {settings.openai_model}")
+        )
     return checks

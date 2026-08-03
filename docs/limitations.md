@@ -15,3 +15,7 @@
 - Rebalancing, transaction costs, and turnover-aware optimization are future work.
 - Backtests can be overfit.
 - Sharpe and Sortino ratios are uncertain estimates and should not be overemphasized.
+- Optional AI explanations are descriptive prose over supplied deterministic values. They do not
+  calculate metrics, repair missing data, establish causal relationships, predict returns with
+  certainty, or provide security-specific trading instructions.
+- Scenario explanations describe the supplied simplified scenario only; they are not forecasts.

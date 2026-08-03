@@ -24,6 +24,8 @@ This project is for investors, builders, and researchers who want deterministic 
 - Handles provider retries, timeouts, rate limits, stale-cache policy, and provider health diagnostics.
 - Computes returns, volatility, Sharpe, Sortino, drawdown, beta, historical VaR, Expected Shortfall, covariance, correlation, and risk contribution.
 - Runs YAML scenario shocks by symbol, sector, and asset type.
+- Optionally turns privacy-filtered, deterministic report slices into OpenAI-powered explanatory
+  prose. This is disabled by default and never changes computed analytics.
 - Exposes the same calculations through a Python SDK and Typer/Rich CLI.
 
 ## Quick Start
@@ -222,6 +224,11 @@ portfolio sync etfs
 portfolio correlations
 portfolio scenario list
 portfolio scenario run tech-selloff
+portfolio explain
+portfolio explain performance
+portfolio explain risk
+portfolio explain scenario tech-selloff
+portfolio explain rebalance
 portfolio report
 portfolio report --format markdown
 portfolio report --output portfolio-report.html
@@ -236,6 +243,45 @@ portfolio summary --format json
 portfolio risk --format json
 portfolio provider-status --format json
 ```
+
+## Optional AI Explanations
+
+AI explanations are an opt-in narrative layer over values that were already calculated locally.
+They are not financial advice, do not execute tools, and do not make trading recommendations.
+The deterministic CLI and SDK remain fully usable when no OpenAI API key is configured.
+
+To opt in, set the following in `.env`:
+
+```dotenv
+ENABLE_AI=true
+OPENAI_API_KEY=replace_me
+OPENAI_MODEL=gpt-5.6
+OPENAI_SEND_DOLLAR_VALUES=false
+OPENAI_STORE_RESPONSES=false
+OPENAI_MAX_INPUT_TOKENS=5000
+OPENAI_MAX_OUTPUT_TOKENS=800
+```
+
+`portfolio explain` gives an overall explanation. The focused commands cover recent performance,
+benchmark results, attribution, risk, concentration, ETF overlap, scenarios, rebalancing
+trade-offs, and limitations:
+
+```bash
+portfolio explain performance
+portfolio explain benchmark
+portfolio explain attribution
+portfolio explain risk
+portfolio explain concentration
+portfolio explain etf-overlap
+portfolio explain scenario tech-selloff
+portfolio explain rebalance
+portfolio explain limitations
+```
+
+Explanation responses are cached locally using the privacy-filtered report content, focus, model,
+and prompt version. Use `--force` to bypass that cache. `OPENAI_STORE_RESPONSES=false` is passed
+to the Responses API by default; local caching is separate and exists to avoid duplicate paid
+requests.
 
 ## Visual Reports And Local Dashboard
 

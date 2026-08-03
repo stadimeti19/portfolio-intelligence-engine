@@ -40,7 +40,12 @@ class Settings(BaseModel):
     sector_concentration_threshold: float = 0.50
     etf_overlap_warning_threshold: float = 0.40
     enable_ai: bool = False
-    openai_model: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-5.6"
+    openai_send_dollar_values: bool = False
+    openai_store_responses: bool = False
+    openai_max_input_tokens: int = Field(default=5000, ge=1)
+    openai_max_output_tokens: int = Field(default=800, ge=1)
     extra: dict[str, str] = Field(default_factory=dict)
 
 
@@ -99,7 +104,16 @@ def load_settings(
             str(merged.get("ETF_OVERLAP_WARNING_THRESHOLD", "0.40"))
         ),
         "enable_ai": str(merged.get("ENABLE_AI", "false")).lower() == "true",
-        "openai_model": merged.get("OPENAI_MODEL") or None,
+        "openai_api_key": merged.get("OPENAI_API_KEY") or None,
+        "openai_model": merged.get("OPENAI_MODEL") or "gpt-5.6",
+        "openai_send_dollar_values": str(
+            merged.get("OPENAI_SEND_DOLLAR_VALUES", "false")
+        ).lower()
+        == "true",
+        "openai_store_responses": str(merged.get("OPENAI_STORE_RESPONSES", "false")).lower()
+        == "true",
+        "openai_max_input_tokens": int(str(merged.get("OPENAI_MAX_INPUT_TOKENS", "5000"))),
+        "openai_max_output_tokens": int(str(merged.get("OPENAI_MAX_OUTPUT_TOKENS", "800"))),
     }
     if overrides:
         data.update(overrides)

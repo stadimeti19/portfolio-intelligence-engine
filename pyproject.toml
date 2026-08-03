@@ -17,6 +17,7 @@ dependencies = [
   "plotly>=5.20",
   "pydantic>=2.6",
   "python-dotenv>=1.0",
+  "openai>=2.37.0",
   "PyYAML>=6.0",
   "rich>=13.7",
   "SQLAlchemy>=2.0",

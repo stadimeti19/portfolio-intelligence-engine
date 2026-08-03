@@ -31,6 +31,11 @@ position_concentration_threshold = 0.25
 sector_concentration_threshold = 0.50
 etf_overlap_warning_threshold = 0.40
 enable_ai = false
+openai_model = "gpt-5.6"
+openai_send_dollar_values = false
+openai_store_responses = false
+openai_max_input_tokens = 5000
+openai_max_output_tokens = 800
 """
 
 
