@@ -11,8 +11,10 @@ requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Sashank Tadimeti" }]
 dependencies = [
+  "Jinja2>=3.1",
   "pandas>=2.0",
   "platformdirs>=4.0",
+  "plotly>=5.20",
   "pydantic>=2.6",
   "python-dotenv>=1.0",
   "PyYAML>=6.0",
@@ -22,6 +24,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dashboard = [
+  "streamlit>=1.35",
+]
 dev = [
   "mypy>=1.10",
   "pybind11>=2.12",

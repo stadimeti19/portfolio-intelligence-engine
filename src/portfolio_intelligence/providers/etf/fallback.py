@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from portfolio_intelligence.domain.etfs import EtfHolding, EtfMetadata, SectorWeight
 from portfolio_intelligence.providers.etf.base import EtfCompositionProvider
@@ -36,7 +36,7 @@ class FallbackEtfCompositionProvider:
         def operation(provider: EtfCompositionProvider) -> EtfMetadata:
             refresh = getattr(provider, "refresh", None)
             if callable(refresh):
-                return refresh(symbol)
+                return cast(EtfMetadata, refresh(symbol))
             provider.get_holdings(symbol)
             provider.get_sector_weights(symbol)
             return provider.get_metadata(symbol)

@@ -3,9 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from portfolio_intelligence.domain.reports import AnalysisReport
+from portfolio_intelligence.reporting.html import HtmlReportRenderer
 
 
 class ReportService:
+    def __init__(self, html_renderer: HtmlReportRenderer | None = None) -> None:
+        self.html_renderer = html_renderer or HtmlReportRenderer()
+
     def to_json(self, report: AnalysisReport) -> str:
         return report.model_dump_json(indent=2)
 
@@ -59,8 +63,15 @@ class ReportService:
             lines.extend(["", "## Limitations", *[f"- {item}" for item in report.limitations]])
         return "\n".join(lines) + "\n"
 
+    def to_html(self, report: AnalysisReport) -> str:
+        return self.html_renderer.render(report)
+
     def write(self, report: AnalysisReport, output: str | Path, fmt: str = "json") -> Path:
         path = Path(output)
+        if fmt == "html":
+            return self.html_renderer.write(report, path)
+        if fmt not in {"json", "markdown"}:
+            raise ValueError("report format must be json, markdown, or html")
         path.parent.mkdir(parents=True, exist_ok=True)
         content = self.to_json(report) if fmt == "json" else self.to_markdown(report)
         path.write_text(content, encoding="utf-8")

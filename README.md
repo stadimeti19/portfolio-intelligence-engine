@@ -222,7 +222,11 @@ portfolio sync etfs
 portfolio correlations
 portfolio scenario list
 portfolio scenario run tech-selloff
+portfolio report
 portfolio report --format markdown
+portfolio report --output portfolio-report.html
+portfolio report --output stress-report.html --scenario tech-selloff
+portfolio dashboard
 ```
 
 Most reporting commands also support JSON:
@@ -232,6 +236,41 @@ portfolio summary --format json
 portfolio risk --format json
 portfolio provider-status --format json
 ```
+
+## Visual Reports And Local Dashboard
+
+Generate a standalone, printable HTML report:
+
+```bash
+portfolio report --output portfolio-report.html
+```
+
+The report embeds Plotly locally and can be opened without a running server. It contains summary,
+holdings, value history, benchmark, drawdown, attribution, allocation, ETF look-through, risk,
+correlation, tail-risk, scenario, provenance, and methodology sections. Optional sections state when
+data is unavailable. Demo and stale-data warnings are explicit.
+
+To include a deterministic scenario-service result:
+
+```bash
+portfolio report --output stress-report.html --scenario tech-selloff
+```
+
+Install and launch the optional Streamlit dashboard:
+
+```bash
+python -m pip install -e ".[dashboard]"
+portfolio dashboard
+```
+
+The dashboard is local, uses the SDK for analysis, and caches typed reports by portfolio inputs,
+data fingerprint, data date, displayed date range, benchmark, confidence level, methodology,
+scenario, thresholds, and reserved optimizer settings. The refresh button bypasses that cache.
+Transaction and local price/composition file changes alter the fingerprint and invalidate results.
+
+The date-range control filters chart display only; portfolio metrics remain the exact values returned
+by the SDK report. Rebalancing controls are visibly reserved and disabled until optimization exists.
+See [visual reporting architecture](docs/visual_reporting.md).
 
 ## Transaction CSV Format
 
@@ -391,20 +430,25 @@ print(report.risk.expected_shortfall)
 ## Architecture
 
 ```text
-Portfolio transactions + market data
+Portfolio transactions + market data + ETF compositions
         ↓
 Validation and normalization
         ↓
 Portfolio accounting
         ↓
-Return and risk analytics
+Return, risk, ETF, and scenario services
         ↓
 Scenario analysis
         ↓
-SDK, CLI, and reports
+Typed AnalysisReport
+        ↓
+CLI, HTML renderer, and local dashboard
 ```
 
-The C++ layer owns deterministic numerical analytics. It has no knowledge of providers, HTTP, SQLite, API keys, CLI formatting, or AI. Python owns ingestion, configuration, accounting orchestration, storage, provider normalization, reports, and CLI/SDK ergonomics.
+The C++ layer owns deterministic numerical analytics. Python application services orchestrate
+accounting, risk, ETF, and scenario calculations into typed reports. The CLI selects commands; the
+Jinja2/Plotly renderer and Streamlit dashboard only present typed values and invoke SDK/service APIs.
+Neither visual layer owns a second implementation of financial formulas.
 
 Provider-specific response objects stay inside provider modules. Application services see normalized domain models such as `PriceBar`, `Quote`, `Dividend`, and `StockSplit`.
 
@@ -419,7 +463,8 @@ python -m ruff check src tests
 
 Python tests cover CSV parsing, validation, average-cost accounting, cash flows, demo providers,
 live provider parsing with mocked HTTP responses, provider fallback, cache behavior, stale-cache
-policy, ETF reconciliation/overlap/concentration, scenarios, and the demo report path.
+policy, ETF reconciliation/overlap/concentration, HTML rendering and escaping, dashboard caching
+and mocked SDK calls, scenarios, and the demo report path.
 
 Normal unit tests and CI do not make real API requests.
 

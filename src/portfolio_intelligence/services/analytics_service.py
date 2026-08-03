@@ -11,6 +11,7 @@ from portfolio_intelligence.domain.reports import (
     AnalysisReport,
     BenchmarkComparison,
     PerformanceReport,
+    ReportSeriesPoint,
     RiskReport,
     SummaryReport,
 )
@@ -129,6 +130,7 @@ class AnalyticsService:
                 sharpe=sharpe,
                 sortino=sortino,
                 maximum_drawdown=drawdown,
+                drawdown_history=_drawdown_history(snapshots),
                 top_contributors=attribution[:5],
             ),
             risk=RiskReport(
@@ -239,6 +241,17 @@ def _time_weighted_returns(snapshots: list[PortfolioSnapshot]) -> list[float]:
         adjusted_value = current.total_portfolio_value - current.external_cash_flow
         returns.append((adjusted_value / previous.total_portfolio_value) - 1.0)
     return [value for value in returns if math.isfinite(value)]
+
+
+def _drawdown_history(snapshots: list[PortfolioSnapshot]) -> list[ReportSeriesPoint]:
+    peak = 0.0
+    points: list[ReportSeriesPoint] = []
+    for snapshot in snapshots:
+        value = snapshot.total_portfolio_value
+        peak = max(peak, value)
+        drawdown = value / peak - 1.0 if peak > 0 else 0.0
+        points.append(ReportSeriesPoint(date=snapshot.date, value=drawdown))
+    return points
 
 
 def _align_lengths(left: list[float], right: list[float]) -> tuple[list[float], list[float]]:

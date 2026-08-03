@@ -28,7 +28,27 @@ class PerformanceReport(BaseModel):
     sharpe: float | None
     sortino: float | None
     maximum_drawdown: float
+    drawdown_history: list[ReportSeriesPoint] = Field(default_factory=list)
     top_contributors: list[dict[str, float | str]] = Field(default_factory=list)
+
+
+class ReportSeriesPoint(BaseModel):
+    date: date
+    value: float
+
+
+class RebalancingTrade(BaseModel):
+    symbol: str
+    action: str
+    current_weight: float
+    target_weight: float
+    trade_value: float
+
+
+class RebalancingPlan(BaseModel):
+    status: str
+    trades: list[RebalancingTrade] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 class RiskReport(BaseModel):
@@ -62,6 +82,7 @@ class AnalysisReport(BaseModel):
     etf_exposure: EtfExposureReport | None = None
     correlations: dict[str, dict[str, float]]
     scenario_results: list[ScenarioResult] = Field(default_factory=list)
+    rebalancing_plan: RebalancingPlan | None = None
     data_freshness: dict[str, str | bool]
     methodology_version: str = "0.1.0"
     limitations: list[str] = Field(default_factory=list)

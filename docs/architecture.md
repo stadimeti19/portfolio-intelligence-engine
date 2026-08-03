@@ -41,4 +41,7 @@ Configuration is loaded from CLI overrides, environment variables, project `.env
 
 ## Future Dashboard
 
-The report objects are serializable and already separate from Rich terminal formatting. A dashboard or standalone HTML report should consume the SDK rather than reimplementing calculations.
+The standalone Jinja2/Plotly report and local Streamlit dashboard consume serializable typed report
+objects. `DashboardService` calls the SDK, caches reports using input/data fingerprints, and delegates
+HTML export to the same renderer. Presentation code does not reimplement analytics. See
+[visual reporting](visual_reporting.md).

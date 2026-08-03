@@ -888,17 +888,46 @@ def scenario_run(name: str, format: str = typer.Option("table", "--format")) -> 
 @app.command()
 def report(
     output: Path | None = typer.Option(None, "--output"),
-    format: str = typer.Option("json", "--format"),
+    format: str | None = typer.Option(None, "--format"),
+    scenario: str | None = typer.Option(None, "--scenario"),
 ) -> None:
-    analysis = PortfolioAnalyzer.demo().analyze()
+    analyzer = _analyzer()
+    analysis = analyzer.analyze()
+    if scenario:
+        analysis = analysis.model_copy(
+            update={"scenario_results": [analyzer.run_scenario(scenario)]}
+        )
     service = ReportService()
     if output:
-        path = service.write(analysis, output, fmt=format)
+        selected_format = format or (
+            "html" if output.suffix.lower() in {".html", ".htm"} else "json"
+        )
+        path = service.write(analysis, output, fmt=selected_format)
         console.print(f"Wrote report to {path}")
     elif format == "markdown":
         console.print(service.to_markdown(analysis))
+    elif format == "html":
+        console.print(service.to_html(analysis))
     else:
         console.print(service.to_json(analysis))
+
+
+@app.command()
+def dashboard(
+    port: int = typer.Option(8501, "--port", min=1, max=65535),
+    address: str = typer.Option("localhost", "--address"),
+) -> None:
+    from portfolio_intelligence.dashboard.launcher import (
+        DashboardDependencyError,
+        launch_dashboard,
+    )
+
+    try:
+        return_code = launch_dashboard(port=port, address=address)
+    except DashboardDependencyError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    if return_code:
+        raise typer.Exit(return_code)
 
 
 if __name__ == "__main__":

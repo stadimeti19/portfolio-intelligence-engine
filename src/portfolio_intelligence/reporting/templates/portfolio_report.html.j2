@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portfolio Intelligence Report — {{ report.summary.data_date|date_value }}</title>
+  <style>
+    :root { --ink:#172033; --muted:#64748b; --line:#dbe3ef; --panel:#fff; --bg:#f4f7fb; --blue:#2563eb; --amber:#b45309; --red:#b91c1c; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .report { max-width:1280px; margin:auto; padding:32px; }
+    header { padding:28px 32px; border-radius:18px; color:#fff; background:linear-gradient(135deg,#102242,#1d4ed8); box-shadow:0 16px 34px #17325d24; }
+    h1 { margin:0 0 6px; font-size:32px; letter-spacing:-.03em; }
+    h2 { margin:0 0 18px; font-size:21px; letter-spacing:-.01em; }
+    h3 { margin:0 0 12px; font-size:16px; }
+    .subtitle { margin:0; color:#dbeafe; }
+    .badges { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .badge { display:inline-block; padding:5px 10px; border-radius:999px; background:#ffffff20; border:1px solid #ffffff38; font-size:12px; font-weight:700; }
+    .badge.demo { color:#422006; background:#fef3c7; border-color:#f59e0b; }
+    section { margin-top:24px; }
+    .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:18px; }
+    .card { grid-column:span 4; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 5px 16px #1720330a; break-inside:avoid; }
+    .card.wide { grid-column:span 6; }
+    .card.full { grid-column:1/-1; }
+    .metric-label { color:var(--muted); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .metric { margin-top:5px; font-size:25px; font-weight:750; letter-spacing:-.03em; }
+    .chart { min-height:360px; }
+    .empty { color:var(--muted); padding:36px 12px; text-align:center; border:1px dashed var(--line); border-radius:10px; }
+    .alert { margin-top:16px; padding:13px 15px; border-radius:10px; background:#fff7ed; color:#7c2d12; border-left:4px solid #f59e0b; }
+    .alert strong { display:block; margin-bottom:3px; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th,td { padding:10px 9px; text-align:right; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--muted); font-size:11px; letter-spacing:.05em; text-transform:uppercase; }
+    th:first-child,td:first-child { text-align:left; }
+    tbody tr:last-child td { border-bottom:0; }
+    .scroll { overflow-x:auto; }
+    .positive { color:#047857; } .negative { color:var(--red); }
+    .notes { color:#46566f; }
+    .notes li { margin:7px 0; }
+    .provenance td:last-child { text-align:left; overflow-wrap:anywhere; }
+    footer { margin-top:30px; padding-top:18px; color:var(--muted); border-top:1px solid var(--line); font-size:12px; }
+    @media (max-width:850px) { .report{padding:16px}.card,.card.wide{grid-column:1/-1}h1{font-size:26px} }
+    @media print { body{background:#fff}.report{max-width:none;padding:0}.card,header{box-shadow:none}.card{page-break-inside:avoid}.chart{min-height:280px}.modebar{display:none!important} }
+  </style>
+</head>
+<body>
+<main class="report">
+  <header>
+    <h1>Portfolio Intelligence Report</h1>
+    <p class="subtitle">As of {{ report.summary.data_date|date_value }} · Generated {{ report.generated_at.isoformat() }} · Benchmark {{ report.summary.benchmark }}</p>
+    <div class="badges">
+      <span class="badge">Methodology {{ report.methodology_version }}</span>
+      {% if synthetic %}<span class="badge demo">Synthetic demo data</span>{% endif %}
+      {% if generated_date_range[0] or generated_date_range[1] %}<span class="badge">Displayed range {{ generated_date_range[0]|date_value }} – {{ generated_date_range[1]|date_value }}</span>{% endif %}
+    </div>
+  </header>
+
+  {% if synthetic %}<div class="alert"><strong>Demo-data warning</strong>This report contains synthetic data and must not be interpreted as actual investment performance.</div>{% endif %}
+  {% for warning in warnings %}<div class="alert"><strong>Data or concentration warning</strong>{{ warning }}</div>{% endfor %}
+
+  <section aria-labelledby="summary-title">
+    <h2 id="summary-title">1. Portfolio Summary</h2>
+    <div class="grid">
+      {% for label,value in [("Portfolio value",report.summary.total_value|currency),("Cash",report.summary.cash|currency),("Cost basis",report.summary.cost_basis|currency),("Unrealized P&L",report.summary.unrealized_pnl|currency),("Realized P&L",report.summary.realized_pnl|currency),("Cumulative return",report.performance.cumulative_return|percentage)] %}
+      <div class="card"><div class="metric-label">{{ label }}</div><div class="metric">{{ value }}</div></div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section aria-labelledby="holdings-title">
+    <div class="card full"><h2 id="holdings-title">2. Holdings</h2><div class="scroll">
+      <table><thead><tr><th scope="col">Security</th><th scope="col">Quantity</th><th scope="col">Average cost</th><th scope="col">Price</th><th scope="col">Market value</th><th scope="col">Weight</th><th scope="col">Unrealized P&amp;L</th></tr></thead><tbody>
+      {% for item in report.holdings %}<tr><td>{{ item.symbol }}</td><td>{{ "%.4f"|format(item.quantity) }}</td><td>{{ item.average_cost|currency }}</td><td>{{ item.current_price|currency }}</td><td>{{ item.market_value|currency }}</td><td>{{ item.weight|percentage }}</td><td class="{{ 'positive' if item.unrealized_pnl >= 0 else 'negative' }}">{{ item.unrealized_pnl|currency }}</td></tr>{% else %}<tr><td colspan="7">No holdings available.</td></tr>{% endfor %}
+      </tbody></table>
+    </div></div>
+  </section>
+
+  <section aria-label="Portfolio history and benchmark"><div class="grid">
+    <figure class="card wide chart" aria-label="Portfolio value history"><h2>3. Portfolio Value History</h2>{{ charts.portfolio_history if charts.portfolio_history else '<div class="empty">No portfolio history available.</div>'|safe }}</figure>
+    <figure class="card wide chart" aria-label="Benchmark comparison"><h2>4. Benchmark Comparison</h2>{{ charts.benchmark }}</figure>
+    <figure class="card wide chart" aria-label="Portfolio drawdown"><h2>5. Drawdown</h2>{{ charts.drawdown if charts.drawdown else '<div class="empty">No drawdown history available.</div>'|safe }}</figure>
+    <figure class="card wide chart" aria-label="Return attribution"><h2>6. Return Attribution</h2>{{ charts.attribution if charts.attribution else '<div class="empty">Return attribution is unavailable.</div>'|safe }}</figure>
+  </div></section>
+
+  <section aria-label="Allocation"><div class="grid">
+    <figure class="card wide chart" aria-label="Position allocation"><h2>7. Position Allocation</h2>{{ charts.positions if charts.positions else '<div class="empty">Position allocation is unavailable.</div>'|safe }}</figure>
+    <figure class="card wide chart" aria-label="Sector allocation"><h2>8. Sector Allocation</h2>{{ charts.sectors if charts.sectors else '<div class="empty">Sector allocation is unavailable.</div>'|safe }}</figure>
+  </div></section>
+
+  <section aria-labelledby="etf-title"><div class="card full"><h2 id="etf-title">9. Effective ETF Look-Through Exposure</h2>
+    {{ charts.effective_exposure if charts.effective_exposure else '<div class="empty">No ETF look-through exposure is available.</div>'|safe }}
+    {% if report.etf_exposure %}<div class="scroll"><table><thead><tr><th scope="col">Security</th><th scope="col">Direct</th><th scope="col">Indirect</th><th scope="col">Effective</th><th scope="col">Contributing ETFs</th><th scope="col">Composition as of</th></tr></thead><tbody>
+    {% for item in report.etf_exposure.securities if item.effective_value > 0 %}<tr><td>{{ item.symbol }}</td><td>{{ item.direct_weight|percentage }}</td><td>{{ item.indirect_weight|percentage }}</td><td>{{ item.effective_weight|percentage }}</td><td>{{ item.contributing_etfs.keys()|join(', ') if item.contributing_etfs else '—' }}</td><td>{{ item.as_of_dates|map('date_value')|join(', ') if item.as_of_dates else '—' }}</td></tr>{% endfor %}
+    </tbody></table></div>{% endif %}
+  </div></section>
+
+  <section aria-label="Risk analytics"><div class="grid">
+    <figure class="card wide chart" aria-label="Risk contribution"><h2>10. Risk Contribution</h2>{{ charts.risk_contribution if charts.risk_contribution else '<div class="empty">Risk contribution is unavailable.</div>'|safe }}</figure>
+    <figure class="card wide chart" aria-label="Correlation heat map"><h2>11. Correlation Heat Map</h2>{{ charts.correlations if charts.correlations else '<div class="empty">Correlation data requires at least two securities.</div>'|safe }}</figure>
+    <figure class="card wide chart" aria-label="Value at Risk and Expected Shortfall"><h2>12. VaR and Expected Shortfall</h2>{{ charts.tail_risk if charts.tail_risk else '<div class="empty">Tail-risk estimates are unavailable.</div>'|safe }}</figure>
+    <div class="card wide"><h3>Risk statistics</h3><table><tbody><tr><td>Annualized volatility</td><td>{{ report.risk.annualized_volatility|percentage }}</td></tr><tr><td>Beta</td><td>{{ report.risk.beta|number }}</td></tr><tr><td>Historical VaR</td><td>{{ report.risk.historical_var|percentage }}</td></tr><tr><td>Expected Shortfall</td><td>{{ report.risk.expected_shortfall|percentage }}</td></tr><tr><td>Maximum drawdown</td><td>{{ report.performance.maximum_drawdown|percentage }}</td></tr></tbody></table></div>
+  </div></section>
+
+  <section aria-labelledby="scenario-title"><div class="card full"><h2 id="scenario-title">13. Scenario Results</h2>{{ charts.scenarios if charts.scenarios else '<div class="empty">No scenario was selected for this report.</div>'|safe }}</div></section>
+
+  <section aria-labelledby="rebalance-title"><div class="card full"><h2 id="rebalance-title">14. Rebalancing Plan</h2>
+    {% if report.rebalancing_plan %}<p>Status: {{ report.rebalancing_plan.status }}</p><div class="scroll"><table><thead><tr><th scope="col">Security</th><th scope="col">Action</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Trade value</th></tr></thead><tbody>{% for trade in report.rebalancing_plan.trades %}<tr><td>{{ trade.symbol }}</td><td>{{ trade.action }}</td><td>{{ trade.current_weight|percentage }}</td><td>{{ trade.target_weight|percentage }}</td><td>{{ trade.trade_value|currency }}</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="empty">No rebalancing plan is available. Optimization is not calculated by the reporting layer.</div>{% endif %}
+  </div></section>
+
+  <section aria-labelledby="freshness-title"><div class="card full provenance"><h2 id="freshness-title">15. Data Freshness and Provenance</h2><table><thead><tr><th scope="col">Field</th><th scope="col">Value</th></tr></thead><tbody>{% for key,value in report.data_freshness|dictsort %}<tr><td>{{ key|replace('_',' ')|title }}</td><td>{{ value }}</td></tr>{% endfor %}{% if report.etf_exposure %}{% for symbol,as_of in report.etf_exposure.data_as_of|dictsort %}<tr><td>{{ symbol }} composition as of</td><td>{{ as_of|date_value }}</td></tr>{% endfor %}{% endif %}</tbody></table></div></section>
+
+  <section aria-labelledby="notes-title"><div class="card full notes"><h2 id="notes-title">16. Methodology and Limitations</h2><p>Metrics are supplied by the Portfolio Intelligence SDK and application services using methodology version {{ report.methodology_version }}. The report renderer only formats typed report values and does not independently calculate portfolio analytics.</p><ul>{% for item in report.limitations %}<li>{{ item }}</li>{% else %}<li>No additional limitation notes were supplied.</li>{% endfor %}</ul></div></section>
+
+  <footer>Generated locally by Portfolio Intelligence &amp; Risk Engine. This report is informational and is not investment advice.</footer>
+</main>
+</body>
+</html>
